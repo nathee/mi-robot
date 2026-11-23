@@ -198,9 +198,9 @@ export function createGizmoController(params: {
 
   let selectedJointIndex = -1;
   let jointDragging = false;
-  let dragPlane = new Plane();
-  let dragCenter = new Vector3();
-  let dragAxisWorld = new Vector3(0, 0, 1);
+  const dragPlane = new Plane();
+  const dragCenter = new Vector3();
+  const dragAxisWorld = new Vector3(0, 0, 1);
   let dragStartVec = new Vector3();
   let dragStartJointDeg = 0;
 
