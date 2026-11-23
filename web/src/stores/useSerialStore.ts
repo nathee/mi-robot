@@ -13,6 +13,7 @@ interface SerialState {
   logs: SerialLogEntry[];
   showTimeline: boolean;
   showMilliseconds: boolean;
+  initReady: () => void;
   appendLog: (entry: { dir?: SerialLogDirection; text: string; ts?: number }) => void;
   clear: () => void;
   setShowTimeline: (v: boolean) => void;
@@ -41,16 +42,23 @@ export function formatLogLine(
 }
 
 export const useSerialStore = create<SerialState>((set, get) => ({
-  logs: [
-    {
-      id: nextLogId++,
-      dir: "ok",
-      text: "Console ready.",
-      ts: Date.now(),
-    },
-  ],
+  logs: [],
   showTimeline: true,
   showMilliseconds: true,
+
+  initReady() {
+    if (get().logs.length > 0) return;
+    set({
+      logs: [
+        {
+          id: nextLogId++,
+          dir: "ok",
+          text: "Console ready.",
+          ts: Date.now(),
+        },
+      ],
+    });
+  },
 
   appendLog({ dir = "sys", text, ts = Date.now() }) {
     const inferredDir: SerialLogDirection =

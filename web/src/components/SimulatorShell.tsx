@@ -47,9 +47,10 @@ export function SimulatorShell() {
   const renameTarget = usePathStore((s) => s.renameTarget);
   const appendLog = useSerialStore((s) => s.appendLog);
 
-  // Initialize theme from localStorage
+  // Initialize theme from localStorage and console ready log on client mount
   useEffect(() => {
     useThemeStore.getState().init();
+    useSerialStore.getState().initReady();
   }, []);
 
   // Global Path Keyboard Shortcuts (matching V2.4.7)
