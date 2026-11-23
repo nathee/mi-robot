@@ -24,6 +24,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LINK_NAMES } from "@/lib/kinematics/constants";
 import { finiteOr, forwardTxRxTzRz } from "@/lib/kinematics/fk";
 import { useCodeStore } from "@/stores/useCodeStore";
+import { useHardwareStore } from "@/stores/useHardwareStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useThemeStore } from "@/stores/useThemeStore";
@@ -608,6 +609,11 @@ export class MirobotSceneEngine {
     // Advance Code Editor / Blocks / Script execution if RUNNING
     if (useCodeStore.getState().status === "RUNNING") {
       useCodeStore.getState().advanceCodeFrame(dtMs);
+    }
+
+    // Advance smooth RS485 / ESP32 hardware commands
+    if (useHardwareStore.getState().smoothTarget) {
+      useHardwareStore.getState().advanceHardwareMotion(dtMs);
     }
 
     // Animate 3D gripper fingers smoothly toward target OPEN/CLOSE gap

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
+  Cable,
   Check,
   ChevronDown,
   Clock,
@@ -17,6 +18,7 @@ import {
   Save,
   Sun,
 } from "lucide-react";
+import { useHardwareStore } from "@/stores/useHardwareStore";
 import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useProjectStore } from "@/stores/useProjectStore";
@@ -29,6 +31,7 @@ interface ToolbarProps {
   onRequestNewProgram: () => void;
   onRequestDownloadRobot: () => void;
   onRequestOpenHistory: () => void;
+  onRequestOpenHardware: () => void;
 }
 
 export function triggerTextDownload(filename: string, content: string, mime = "text/plain"): void {
@@ -48,6 +51,7 @@ export function Toolbar({
   onRequestNewProgram,
   onRequestDownloadRobot,
   onRequestOpenHistory,
+  onRequestOpenHardware,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -64,6 +68,8 @@ export function Toolbar({
 
   const historyCount = useHistoryStore((s) => s.entries.length);
   const saveToHistory = useHistoryStore((s) => s.saveToHistory);
+  const hwConnected = useHardwareStore((s) => s.connected);
+  const hwRxCount = useHardwareStore((s) => s.rxCount);
 
   const targetsCount = usePathStore((s) => s.targets.length);
   const importProgramText = usePathStore((s) => s.importProgramText);
@@ -167,6 +173,29 @@ export function Toolbar({
           className="hidden"
           onChange={handleFileChange}
         />
+
+        {/* ESP32 / RS485 Live Link Button */}
+        <button
+          type="button"
+          onClick={onRequestOpenHardware}
+          title="Connect USB-RS485 or ESP32 Wi-Fi to drive the virtual robot"
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            hwConnected
+              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300"
+              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              hwConnected ? "animate-pulse bg-emerald-500" : "bg-slate-400"
+            }`}
+          />
+          <Cable className="h-3.5 w-3.5" />
+          <span className="hidden lg:inline">RS485</span>
+          {hwConnected && hwRxCount > 0 && (
+            <span className="font-mono text-[10px] opacity-80">{hwRxCount}</span>
+          )}
+        </button>
 
         {/* Quick Save Snapshot (Ctrl+S) */}
         <button

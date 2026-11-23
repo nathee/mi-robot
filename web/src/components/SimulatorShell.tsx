@@ -9,6 +9,7 @@ import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { ControlSidebar } from "./ControlSidebar";
+import { HardwareModal } from "./HardwareModal";
 import { ConfirmModal, DownloadRobotModal, HistoryModal, TextPromptModal } from "./Modals";
 import { SerialConsole } from "./SerialConsole";
 import { StatusBar } from "./StatusBar";
@@ -41,6 +42,7 @@ export function SimulatorShell() {
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [hardwareModalOpen, setHardwareModalOpen] = useState(false);
 
   const projectName = useProjectStore((s) => s.name);
   const dirty = useProjectStore((s) => s.dirty);
@@ -232,6 +234,7 @@ export function SimulatorShell() {
         onRequestNewProgram={handleRequestNewProgram}
         onRequestDownloadRobot={() => setDownloadModalOpen(true)}
         onRequestOpenHistory={() => setHistoryModalOpen(true)}
+        onRequestOpenHardware={() => setHardwareModalOpen(true)}
       />
 
       {/* Main Workspace: 3D Viewport + Control Sidebar + Collapsible Console */}
@@ -365,6 +368,11 @@ export function SimulatorShell() {
         onDelete={(id) => deleteFromHistory(id)}
         onClearAll={() => clearHistory()}
         onClose={() => setHistoryModalOpen(false)}
+      />
+
+      <HardwareModal
+        open={hardwareModalOpen}
+        onClose={() => setHardwareModalOpen(false)}
       />
 
       <DownloadRobotModal

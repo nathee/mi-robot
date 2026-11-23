@@ -15,7 +15,7 @@ export interface LoadedRobotMeshes {
 
 /**
  * Loads base.stl and link1.stl..link6.stl from /models/ and builds the exact
- * V2.4.7 scene hierarchy (link1..link6 mounted under base).
+ * v0.0.1 scene hierarchy (link1..link6 mounted under base).
  */
 export function loadMirobotSTLs(
   targetGroup: Group,

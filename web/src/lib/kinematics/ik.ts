@@ -472,7 +472,7 @@ function chooseBestIKCandidate(
 }
 
 /**
- * Unified IK solver matching Mirobot Simulator V2.4.7:
+ * Unified IK solver matching Mirobot Simulator v0.0.1:
  * supports ANALYTIC, DLS, and CONSTRAINED (hybrid analytic seed + constrained DLS refinement).
  */
 export function solveIKPoseCandidate(
