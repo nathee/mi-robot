@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useCodeStore } from "@/stores/useCodeStore";
+import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useProjectStore } from "@/stores/useProjectStore";
+import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { ControlSidebar } from "./ControlSidebar";
-import { ConfirmModal, DownloadRobotModal, TextPromptModal } from "./Modals";
+import { ConfirmModal, DownloadRobotModal, HistoryModal, TextPromptModal } from "./Modals";
 import { SerialConsole } from "./SerialConsole";
 import { StatusBar } from "./StatusBar";
 import { Toolbar, triggerTextDownload } from "./Toolbar";
@@ -37,10 +40,16 @@ export function SimulatorShell() {
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
 
   const projectName = useProjectStore((s) => s.name);
   const dirty = useProjectStore((s) => s.dirty);
   const setProjectName = useProjectStore((s) => s.setName);
+  const historyEntries = useHistoryStore((s) => s.entries);
+  const saveToHistory = useHistoryStore((s) => s.saveToHistory);
+  const restoreFromHistory = useHistoryStore((s) => s.restoreFromHistory);
+  const deleteFromHistory = useHistoryStore((s) => s.deleteFromHistory);
+  const clearHistory = useHistoryStore((s) => s.clearHistory);
   const targets = usePathStore((s) => s.targets);
   const exportGcodeString = usePathStore((s) => s.exportGcodeString);
   const newProgram = usePathStore((s) => s.newProgram);
@@ -48,17 +57,58 @@ export function SimulatorShell() {
   const renameTarget = usePathStore((s) => s.renameTarget);
   const appendLog = useSerialStore((s) => s.appendLog);
 
-  // Initialize theme from localStorage and console ready log on client mount
+  // Initialize theme, console ready log, and restore previous session from localStorage
   useEffect(() => {
     useThemeStore.getState().init();
     useSerialStore.getState().initReady();
+    useHistoryStore.getState().hydrate();
   }, []);
 
-  // Global Path Keyboard Shortcuts
+  // Warn before closing or refreshing when there are unsaved changes
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!useProjectStore.getState().dirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  // Debounced auto-save draft to localStorage whenever workspace changes
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleAutosave = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        useHistoryStore.getState().saveAutosave();
+      }, 400);
+    };
+
+    const unsubs = [
+      useProjectStore.subscribe(scheduleAutosave),
+      usePathStore.subscribe(scheduleAutosave),
+      useCodeStore.subscribe(scheduleAutosave),
+      useRobotStore.subscribe(scheduleAutosave),
+    ];
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubs.forEach((u) => u());
+    };
+  }, []);
+
+  // Global Keyboard Shortcuts (including Ctrl+S to save snapshot)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        useHistoryStore.getState().saveToHistory("Ctrl+S save");
+        return;
+      }
+
+      if (isEditableTarget(e.target)) return;
       const path = usePathStore.getState();
 
       if (mod && e.key.toLowerCase() === "i") {
@@ -125,7 +175,7 @@ export function SimulatorShell() {
   }, [draggingSplit]);
 
   const handleRequestNewProgram = () => {
-    if (dirty && targets.length > 0) {
+    if (dirty) {
       setConfirmNewOpen(true);
     } else {
       newProgram();
@@ -181,6 +231,7 @@ export function SimulatorShell() {
         onRequestRenameProject={() => setRenameProjectOpen(true)}
         onRequestNewProgram={handleRequestNewProgram}
         onRequestDownloadRobot={() => setDownloadModalOpen(true)}
+        onRequestOpenHistory={() => setHistoryModalOpen(true)}
       />
 
       {/* Main Workspace: 3D Viewport + Control Sidebar + Collapsible Console */}
@@ -296,11 +347,24 @@ export function SimulatorShell() {
       <ConfirmModal
         open={confirmNewOpen}
         title="Start New Program?"
-        message="You have unsaved changes in the current path program. Discard them and start fresh?"
-        confirmLabel="Discard & New"
-        danger
-        onConfirm={() => newProgram()}
+        message="You have unsaved changes. Starting a new program will save a backup to Work History first, then reset your workspace."
+        confirmLabel="Backup & Start New"
+        onConfirm={() => {
+          saveToHistory("Auto-backup before New");
+          newProgram();
+        }}
         onClose={() => setConfirmNewOpen(false)}
+      />
+
+      <HistoryModal
+        open={historyModalOpen}
+        entries={historyEntries}
+        isDirty={dirty}
+        onSaveNow={() => saveToHistory("Manual snapshot")}
+        onRestore={(id) => restoreFromHistory(id)}
+        onDelete={(id) => deleteFromHistory(id)}
+        onClearAll={() => clearHistory()}
+        onClose={() => setHistoryModalOpen(false)}
       />
 
       <DownloadRobotModal

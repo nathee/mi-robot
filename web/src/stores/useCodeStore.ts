@@ -163,17 +163,21 @@ export const useCodeStore = create<CodeState>((set, get) => ({
 
   setBlocks(blocks) {
     set({ blocks, errors: [] });
+    useProjectStore.getState().setDirty(true);
   },
 
   setScriptText(scriptText) {
     set({ scriptText, errors: [] });
+    useProjectStore.getState().setDirty(true);
   },
 
   setGcodeText(gcodeText) {
     set({ gcodeText, errors: [] });
+    useProjectStore.getState().setDirty(true);
   },
 
   addBlock(block, parentRepeatId) {
+    useProjectStore.getState().setDirty(true);
     if (!parentRepeatId) {
       set((s) => ({ blocks: [...s.blocks, block], errors: [] }));
       return;
@@ -189,6 +193,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   updateBlock(id, updater) {
+    useProjectStore.getState().setDirty(true);
     set((s) => ({
       blocks: mapBlocksRecursive(s.blocks, (b) => (b.id === id ? updater(b) : b)),
       errors: [],
@@ -196,6 +201,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   removeBlock(id) {
+    useProjectStore.getState().setDirty(true);
     set((s) => ({
       blocks: mapBlocksRecursive(s.blocks, (b) => (b.id === id ? null : b)),
       errors: [],
@@ -203,6 +209,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   moveBlock(fromIdx, toIdx) {
+    useProjectStore.getState().setDirty(true);
     set((s) => {
       if (
         fromIdx < 0 ||

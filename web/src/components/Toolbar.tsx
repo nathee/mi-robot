@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
+  Check,
   ChevronDown,
+  Clock,
   Download,
   FileCode2,
   FilePlus2,
@@ -15,6 +17,7 @@ import {
   Save,
   Sun,
 } from "lucide-react";
+import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
@@ -25,6 +28,7 @@ interface ToolbarProps {
   onRequestRenameProject: () => void;
   onRequestNewProgram: () => void;
   onRequestDownloadRobot: () => void;
+  onRequestOpenHistory: () => void;
 }
 
 export function triggerTextDownload(filename: string, content: string, mime = "text/plain"): void {
@@ -43,6 +47,7 @@ export function Toolbar({
   onRequestRenameProject,
   onRequestNewProgram,
   onRequestDownloadRobot,
+  onRequestOpenHistory,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -56,6 +61,9 @@ export function Toolbar({
 
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+
+  const historyCount = useHistoryStore((s) => s.entries.length);
+  const saveToHistory = useHistoryStore((s) => s.saveToHistory);
 
   const targetsCount = usePathStore((s) => s.targets.length);
   const importProgramText = usePathStore((s) => s.importProgramText);
@@ -81,16 +89,18 @@ export function Toolbar({
       .replace(/[^a-zA-Z0-9._-]+/g, "_")
       .replace(/^_+|_+$/g, "") || "mirobot-program";
 
-  const handleSave = (fmt: "json" | "gcode") => {
+  const handleSaveFile = (fmt: "json" | "gcode") => {
     setFileMenuOpen(false);
     if (fmt === "gcode") {
       triggerTextDownload(`${safeSlug}.gcode`, exportGcodeString(), "text/plain");
       setFileMeta({ fileName: safeSlug, fileFormat: "gcode", dirty: false });
+      saveToHistory("Exported G-code");
       appendLog({ dir: "ok", text: `[PATH] Exported ${safeSlug}.gcode` });
     } else {
       triggerTextDownload(`${safeSlug}.json`, exportJsonString(), "application/json");
       setFileMeta({ fileName: safeSlug, fileFormat: "json", dirty: false });
       setDirty(false);
+      saveToHistory("Saved JSON");
       appendLog({ dir: "ok", text: `[PATH] Saved ${safeSlug}.json` });
     }
   };
@@ -102,6 +112,7 @@ export function Toolbar({
     try {
       const text = await file.text();
       importProgramText(file.name, text);
+      saveToHistory(`Opened ${file.name}`);
     } catch (err) {
       appendLog({
         dir: "error",
@@ -134,16 +145,21 @@ export function Toolbar({
           title="Click to rename project"
           className="group inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
         >
-          <span className="max-w-44 truncate">
-            {projectName}
-            {dirty && <span className="ml-0.5 text-sky-500">*</span>}
-          </span>
-          <Pencil className="h-3 w-3 text-slate-400 opacity-60 transition group-hover:opacity-100" />
+          <span className="max-w-44 truncate">{projectName}</span>
+          {dirty ? (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+              title="Unsaved changes — press Ctrl+S or click Save"
+            />
+          ) : (
+            <Check className="h-3 w-3 shrink-0 text-emerald-500" aria-label="Saved" />
+          )}
+          <Pencil className="h-3 w-3 text-slate-400 opacity-50 transition group-hover:opacity-100" />
         </button>
       </div>
 
-      {/* Right: Clean File Dropdown, Home Quick Action & Theme Icons */}
-      <div className="flex items-center gap-2">
+      {/* Right: Save, History, Program File Menu, Home & Theme */}
+      <div className="flex items-center gap-1.5">
         <input
           ref={fileInputRef}
           type="file"
@@ -152,15 +168,46 @@ export function Toolbar({
           onChange={handleFileChange}
         />
 
+        {/* Quick Save Snapshot (Ctrl+S) */}
+        <button
+          type="button"
+          onClick={() => saveToHistory("Manual save")}
+          title="Save snapshot to Work History (Ctrl+S)"
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            dirty
+              ? "border-amber-500/40 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          }`}
+        >
+          <Save className="h-3.5 w-3.5" />
+          <span className="hidden md:inline">{dirty ? "Save*" : "Saved"}</span>
+        </button>
+
+        {/* Work History Modal Trigger */}
+        <button
+          type="button"
+          onClick={onRequestOpenHistory}
+          title="View and restore previous saved work"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          <Clock className="h-3.5 w-3.5 text-sky-500" />
+          <span className="hidden md:inline">History</span>
+          {historyCount > 0 && (
+            <span className="rounded-full bg-sky-500/15 px-1.5 font-mono text-[10px] font-bold text-sky-600 dark:text-sky-400">
+              {historyCount}
+            </span>
+          )}
+        </button>
+
         {/* File Menu Dropdown */}
         <div ref={menuRef} className="relative">
           <button
             type="button"
             onClick={() => setFileMenuOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <FolderOpen className="h-3.5 w-3.5 text-sky-500" />
-            <span>Program</span>
+            <span className="hidden sm:inline">Program</span>
             <ChevronDown className="h-3.5 w-3.5 opacity-60" />
           </button>
 
@@ -191,16 +238,16 @@ export function Toolbar({
               <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
               <button
                 type="button"
-                onClick={() => handleSave("json")}
+                onClick={() => handleSaveFile("json")}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Save className="h-3.5 w-3.5 text-slate-400" />
-                Save Project (.json)
+                Download Project (.json)
               </button>
               <button
                 type="button"
                 disabled={targetsCount === 0}
-                onClick={() => handleSave("gcode")}
+                onClick={() => handleSaveFile("gcode")}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FileCode2 className="h-3.5 w-3.5 text-slate-400" />
