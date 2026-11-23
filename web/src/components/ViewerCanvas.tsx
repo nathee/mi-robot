@@ -326,7 +326,7 @@ export function ViewerCanvas() {
                 step={0.05}
                 value={viewer.tcpDragScale}
                 onChange={(e) => viewer.setField("tcpDragScale", Number(e.target.value))}
-                className="w-12 rounded border border-slate-300 bg-white px-1 py-0.5 text-center font-mono text-[11px] outline-none dark:border-slate-700 dark:bg-slate-950"
+                className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center font-mono text-[11px] outline-none dark:border-slate-700 dark:bg-slate-950"
               />
             </label>
 

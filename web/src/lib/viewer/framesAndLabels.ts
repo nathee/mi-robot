@@ -597,12 +597,12 @@ export function updateTcpCoordLabelSprite(
   const camRight = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
   const camUp = new Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
   const scaleFactor = Math.max(0.75, labelFontSize / 14);
-  const cardH = 115 * scaleFactor * worldPerPx;
+  const cardH = 128 * scaleFactor * worldPerPx;
   const cardW = cardH * (420 / 310);
 
   sprite.scale.set(cardW, cardH, 1);
   sprite.position
     .copy(anchorWorld)
-    .addScaledVector(camRight, cardW * 0.72)
-    .addScaledVector(camUp, cardH * 0.48);
+    .addScaledVector(camRight, -cardW * 0.85)
+    .addScaledVector(camUp, cardH * 0.72);
 }
