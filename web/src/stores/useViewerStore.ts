@@ -74,6 +74,7 @@ export interface ViewerState {
 
   // Actions
   setField: <K extends keyof ViewerDataFields>(key: K, value: ViewerDataFields[K]) => void;
+  setControlMode: (mode: "JOINT" | "IK_MOVE" | "IK_ROTATE") => void;
   setLinkFrameVisible: (index: number, visible: boolean) => void;
   setFrameAxisVisible: (axis: keyof FrameAxesVisibility, visible: boolean) => void;
   setAxisColor: (axis: keyof AxisColors, color: string) => void;
@@ -82,17 +83,22 @@ export interface ViewerState {
 
 type ViewerDataFields = Omit<
   ViewerState,
-  "setField" | "setLinkFrameVisible" | "setFrameAxisVisible" | "setAxisColor" | "setDlsConfig"
+  | "setField"
+  | "setControlMode"
+  | "setLinkFrameVisible"
+  | "setFrameAxisVisible"
+  | "setAxisColor"
+  | "setDlsConfig"
 >;
 
 export const useViewerStore = create<ViewerState>((set) => ({
   showGrid: true,
   showZGrid: false,
-  showWorldFrame: true,
-  showLinkFrames: true,
+  showWorldFrame: false,
+  showLinkFrames: false,
   linkFrameVisibility: [true, true, true, true, true, true],
   showTcpFrame: true,
-  showTcpValue: true,
+  showTcpValue: false,
   showWorkspace: true,
   showPath: true,
   showPoints: true,
@@ -137,6 +143,16 @@ export const useViewerStore = create<ViewerState>((set) => ({
 
   setField(key, value) {
     set({ [key]: value } as Partial<ViewerState>);
+  },
+
+  setControlMode(mode) {
+    if (mode === "JOINT") {
+      set({ poseMode: "JOINT" });
+    } else if (mode === "IK_MOVE") {
+      set({ poseMode: "IK", enableTcpMouseDrag: true, tcpTransformMode: "translate" });
+    } else {
+      set({ poseMode: "IK", enableTcpMouseDrag: true, tcpTransformMode: "rotate" });
+    }
   },
 
   setLinkFrameVisible(index, visible) {

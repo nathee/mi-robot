@@ -1,5 +1,7 @@
 "use client";
 
+import { Route, Sliders } from "lucide-react";
+import { usePathStore } from "@/stores/usePathStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 import { JogPanel } from "./JogPanel";
 import { PathPanel } from "./PathPanel";
@@ -15,37 +17,42 @@ export function ControlSidebar({
 }: ControlSidebarProps) {
   const sidebarPanel = useViewerStore((s) => s.sidebarPanel);
   const setField = useViewerStore((s) => s.setField);
+  const targetsCount = usePathStore((s) => s.targets.length);
 
   return (
     <aside className="flex h-full flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-        <span className="text-xs font-bold tracking-wide text-slate-700 uppercase dark:text-slate-200">
-          Control
-        </span>
-        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-900">
-          <button
-            type="button"
-            onClick={() => setField("sidebarPanel", "JOG")}
-            className={`rounded-md px-3 py-0.5 text-xs font-semibold transition ${
-              sidebarPanel === "JOG"
-                ? "bg-sky-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-            }`}
-          >
-            Jog
-          </button>
-          <button
-            type="button"
-            onClick={() => setField("sidebarPanel", "PATH")}
-            className={`rounded-md px-3 py-0.5 text-xs font-semibold transition ${
-              sidebarPanel === "PATH"
-                ? "bg-sky-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-            }`}
-          >
-            Path
-          </button>
-        </div>
+      {/* Clean Full-Width Tabs */}
+      <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50/70 p-1.5 dark:border-slate-800 dark:bg-slate-900/60">
+        <button
+          type="button"
+          onClick={() => setField("sidebarPanel", "JOG")}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${
+            sidebarPanel === "JOG"
+              ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <Sliders className="h-3.5 w-3.5" />
+          <span>Manual Control</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setField("sidebarPanel", "PATH")}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${
+            sidebarPanel === "PATH"
+              ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          <Route className="h-3.5 w-3.5" />
+          <span>Auto Path</span>
+          {targetsCount > 0 && (
+            <span className="rounded-full bg-sky-500/15 px-1.5 py-0.2 font-mono text-[10px] font-bold text-sky-600 dark:text-sky-400">
+              {targetsCount}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">

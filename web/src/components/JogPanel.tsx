@@ -1,37 +1,48 @@
 "use client";
 
-import { AlertTriangle, Crosshair, Minus, Plus } from "lucide-react";
+import { AlertTriangle, Crosshair, Minus, Plus, Sparkles } from "lucide-react";
 import { JOINT_LIMITS, type Pose6D } from "@/lib/kinematics/constants";
 import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
+import { useSerialStore } from "@/stores/useSerialStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 
-const LINEAR_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; step: number }> = [
-  { key: "x", label: "X", unit: "mm", step: 1 },
-  { key: "y", label: "Y", unit: "mm", step: 1 },
-  { key: "z", label: "Z", unit: "mm", step: 1 },
-  { key: "rx", label: "Rx", unit: "°", step: 1 },
-  { key: "ry", label: "Ry", unit: "°", step: 1 },
-  { key: "rz", label: "Rz", unit: "°", step: 1 },
+const JOINT_SHORT_NAMES = ["Base", "Shoulder", "Elbow", "Wrist P", "Wrist R", "Tool"] as const;
+
+const PRESET_POSES: Array<{ label: string; joints: number[] }> = [
+  { label: "Home", joints: [0, 0, 0, 0, 0, 0] },
+  { label: "Ready", joints: [0, 15, -20, 0, -25, 0] },
+  { label: "Reach", joints: [30, 32, -25, 0, -10, 0] },
+  { label: "Pick", joints: [-35, 28, -32, 0, -18, 0] },
+];
+
+const LINEAR_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; step: number; color: string }> = [
+  { key: "x", label: "X", unit: "mm", step: 2, color: "text-rose-500" },
+  { key: "y", label: "Y", unit: "mm", step: 2, color: "text-emerald-500" },
+  { key: "z", label: "Z", unit: "mm", step: 2, color: "text-sky-500" },
+  { key: "rx", label: "Rx", unit: "°", step: 2, color: "text-indigo-500" },
+  { key: "ry", label: "Ry", unit: "°", step: 2, color: "text-indigo-500" },
+  { key: "rz", label: "Rz", unit: "°", step: 2, color: "text-indigo-500" },
 ];
 
 export function JogPanel() {
   const joints = useRobotStore((s) => s.joints);
-  const eePose = useRobotStore((s) => s.eePose);
   const ikTarget = useRobotStore((s) => s.ikTarget);
   const lastIkErr = useRobotStore((s) => s.lastIkErr);
   const workspaceStatus = useRobotStore((s) => s.workspaceStatus);
   const setJoint = useRobotStore((s) => s.setJoint);
+  const setJoints = useRobotStore((s) => s.setJoints);
   const stepJoint = useRobotStore((s) => s.stepJoint);
   const setIkTarget = useRobotStore((s) => s.setIkTarget);
   const applyIk = useRobotStore((s) => s.applyIk);
 
   const poseMode = useViewerStore((s) => s.poseMode);
-  const setField = useViewerStore((s) => s.setField);
+  const setControlMode = useViewerStore((s) => s.setControlMode);
   const ikAutoApply = useViewerStore((s) => s.ikAutoApply);
   const workspace = useViewerStore((s) => s.workspace);
 
   const cancelPath = usePathStore((s) => s.cancelForManualControl);
+  const appendLog = useSerialStore((s) => s.appendLog);
 
   const axisRange = (key: keyof Pose6D): { min: number; max: number } => {
     if (key === "x") return { min: workspace.xMin, max: workspace.xMax };
@@ -49,92 +60,61 @@ export function JogPanel() {
     }
   };
 
+  const applyPreset = (label: string, presetJoints: number[]) => {
+    cancelPath();
+    setJoints(presetJoints, { syncIk: true });
+    appendLog({ dir: "sys", text: `Moved to preset pose: ${label}` });
+  };
+
   return (
     <div className="space-y-3">
-      {/* Current State Card */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-2.5 dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-            Current State
-          </span>
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-950">
-            <button
-              type="button"
-              onClick={() => setField("poseMode", "JOINT")}
-              className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition ${
-                poseMode === "JOINT"
-                  ? "bg-sky-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-              }`}
-            >
-              Joint Jog
-            </button>
-            <button
-              type="button"
-              onClick={() => setField("poseMode", "IK")}
-              className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition ${
-                poseMode === "IK"
-                  ? "bg-sky-600 text-white shadow-xs"
-                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-              }`}
-            >
-              Linear Jog
-            </button>
-          </div>
+      {/* Quick Preset Poses */}
+      <div>
+        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+          <Sparkles className="h-3 w-3 text-sky-500" />
+          <span>Quick Poses</span>
         </div>
-
-        {/* Joint Space <-> FK/IK <-> Cartesian Space */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px]">
-          <div className="rounded-lg border border-slate-200/80 bg-white p-2 dark:border-slate-800 dark:bg-slate-950/70">
-            <div className="mb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-              Joint Space (deg)
-            </div>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[11px]">
-              {joints.map((q, i) => (
-                <div key={i} className="flex justify-between">
-                  <span className="text-slate-400">J{i + 1}</span>
-                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                    {q.toFixed(1)}°
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center gap-0.5 text-[10px] font-semibold text-sky-500">
-            <span>FK →</span>
-            <span>← IK</span>
-          </div>
-
-          <div className="rounded-lg border border-slate-200/80 bg-white p-2 dark:border-slate-800 dark:bg-slate-950/70">
-            <div className="mb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-              Cartesian (TCP)
-            </div>
-            <div className="space-y-0.5 font-mono text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-rose-400">X</span>
-                <span>{eePose.x.toFixed(1)} mm</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-emerald-400">Y</span>
-                <span>{eePose.y.toFixed(1)} mm</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sky-400">Z</span>
-                <span>{eePose.z.toFixed(1)} mm</span>
-              </div>
-              <div className="mt-1 flex justify-between border-t border-slate-200/70 pt-0.5 text-[10px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                <span>R</span>
-                <span>
-                  {eePose.rx.toFixed(0)}/{eePose.ry.toFixed(0)}/{eePose.rz.toFixed(0)}°
-                </span>
-              </div>
-            </div>
-          </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {PRESET_POSES.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => applyPreset(preset.label, preset.joints)}
+              className="rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-xs font-medium text-slate-700 transition hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Workspace Out-Of-Bounds Warning */}
+      {/* Mode Switcher: Joint vs Cartesian (IK) */}
+      <div className="grid grid-cols-2 rounded-xl border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
+        <button
+          type="button"
+          onClick={() => setControlMode("JOINT")}
+          className={`rounded-lg py-1.5 text-xs font-semibold transition ${
+            poseMode === "JOINT"
+              ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Joints (J1–J6)
+        </button>
+        <button
+          type="button"
+          onClick={() => setControlMode("IK_MOVE")}
+          className={`rounded-lg py-1.5 text-xs font-semibold transition ${
+            poseMode === "IK"
+              ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
+              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Position (X/Y/Z)
+        </button>
+      </div>
+
+      {/* Out of Workspace Alert */}
       {workspaceStatus.out && (
         <div className="flex items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2.5 py-2 text-xs text-rose-600 dark:text-rose-400">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -142,23 +122,26 @@ export function JogPanel() {
         </div>
       )}
 
-      {/* Mode Controls */}
+      {/* Compact Joint Sliders (all 6 fit comfortably without scrolling) */}
       {poseMode === "JOINT" ? (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {JOINT_LIMITS.map((limit, i) => {
             const val = joints[i] ?? 0;
             return (
               <div
                 key={i}
-                className="rounded-lg border border-slate-200/80 bg-white p-2 dark:border-slate-800 dark:bg-slate-900/60"
+                className="rounded-xl border border-slate-200/80 bg-white px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900/70"
               >
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex h-5 w-7 items-center justify-center rounded bg-sky-500/15 font-mono text-[11px] font-bold text-sky-600 dark:text-sky-400">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="font-mono text-xs font-bold text-sky-600 dark:text-sky-400">
                       J{i + 1}
                     </span>
+                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                      {JOINT_SHORT_NAMES[i]}
+                    </span>
                     <span className="font-mono text-[10px] text-slate-400">
-                      [{limit.min}°, {limit.max}°]
+                      {limit.min}°..{limit.max}°
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -166,34 +149,34 @@ export function JogPanel() {
                       type="button"
                       onClick={() => {
                         cancelPath();
-                        stepJoint(i, -1);
+                        stepJoint(i, -5);
                       }}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      title={`Decrease J${i + 1} by 1°`}
+                      title={`J${i + 1} -5°`}
+                      className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       <Minus className="h-3 w-3" />
                     </button>
                     <input
                       type="number"
-                      step={0.5}
+                      step={1}
                       min={limit.min}
                       max={limit.max}
-                      value={Number(val.toFixed(2))}
+                      value={Number(val.toFixed(1))}
                       onChange={(e) => {
                         cancelPath();
                         setJoint(i, Number(e.target.value), { log: false });
                       }}
                       onBlur={(e) => setJoint(i, Number(e.target.value), { log: true })}
-                      className="w-16 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center font-mono text-xs font-medium text-slate-900 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="w-14 rounded-md border border-slate-200 bg-slate-50 py-0.5 text-center font-mono text-xs font-semibold text-slate-900 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                     />
                     <button
                       type="button"
                       onClick={() => {
                         cancelPath();
-                        stepJoint(i, 1);
+                        stepJoint(i, 5);
                       }}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      title={`Increase J${i + 1} by 1°`}
+                      title={`J${i + 1} +5°`}
+                      className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
                     >
                       <Plus className="h-3 w-3" />
                     </button>
@@ -203,7 +186,7 @@ export function JogPanel() {
                   type="range"
                   min={limit.min}
                   max={limit.max}
-                  step={0.1}
+                  step={0.5}
                   value={val}
                   onChange={(e) => {
                     cancelPath();
@@ -217,44 +200,46 @@ export function JogPanel() {
           })}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
+          <p className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[11px] text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
+            Tip: You can also drag the RGB arrows directly on the robot tip in the 3D view.
+          </p>
+
           {LINEAR_AXES.map((axis) => {
             const range = axisRange(axis.key);
             const val = ikTarget[axis.key];
             return (
               <div
                 key={axis.key}
-                className="rounded-lg border border-slate-200/80 bg-white p-2 dark:border-slate-800 dark:bg-slate-900/60"
+                className="rounded-xl border border-slate-200/80 bg-white px-2.5 py-2 dark:border-slate-800 dark:bg-slate-900/70"
               >
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex h-5 w-7 items-center justify-center rounded bg-indigo-500/15 font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={`font-mono text-xs font-bold ${axis.color}`}>
                       {axis.label}
                     </span>
-                    <span className="font-mono text-[10px] text-slate-400">
-                      [{range.min.toFixed(0)}, {range.max.toFixed(0)} {axis.unit}]
-                    </span>
+                    <span className="font-mono text-[10px] text-slate-400">{axis.unit}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => handleLinearChange(axis.key, val - axis.step, true)}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       <Minus className="h-3 w-3" />
                     </button>
                     <input
                       type="number"
-                      step={0.5}
-                      value={Number(val.toFixed(2))}
+                      step={1}
+                      value={Number(val.toFixed(1))}
                       onChange={(e) => handleLinearChange(axis.key, Number(e.target.value), false)}
                       onBlur={(e) => handleLinearChange(axis.key, Number(e.target.value), true)}
-                      className="w-16 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center font-mono text-xs font-medium text-slate-900 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                      className="w-16 rounded-md border border-slate-200 bg-slate-50 py-0.5 text-center font-mono text-xs font-semibold text-slate-900 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                     />
                     <button
                       type="button"
                       onClick={() => handleLinearChange(axis.key, val + axis.step, true)}
-                      className="flex h-6 w-6 items-center justify-center rounded border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
                     >
                       <Plus className="h-3 w-3" />
                     </button>
@@ -264,7 +249,7 @@ export function JogPanel() {
                   type="range"
                   min={range.min}
                   max={range.max}
-                  step={0.5}
+                  step={1}
                   value={val}
                   onChange={(e) => handleLinearChange(axis.key, Number(e.target.value), false)}
                   onPointerUp={() => applyIk({ withLog: true, rollbackOnFail: true })}
@@ -284,11 +269,8 @@ export function JogPanel() {
               Solve IK
             </button>
             <div className="text-right font-mono text-[10px] text-slate-500 dark:text-slate-400">
-              <div>
-                IK Error: <strong>{lastIkErr.posMm.toFixed(2)} mm</strong> /{" "}
-                <strong>{lastIkErr.rotDeg.toFixed(2)}°</strong>
-              </div>
-              <div className="truncate text-[10px] text-sky-500">({lastIkErr.solver})</div>
+              Err: <strong>{lastIkErr.posMm.toFixed(2)}mm</strong> /{" "}
+              <strong>{lastIkErr.rotDeg.toFixed(1)}°</strong>
             </div>
           </div>
         </div>

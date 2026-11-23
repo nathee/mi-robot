@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Home,
+  Hand,
+  Layers,
+  Move,
   RotateCcw,
-  SlidersHorizontal,
+  RotateCw,
   Sun,
-  SunDim,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -16,21 +17,29 @@ import {
   type ViewAxisKey,
   type ViewGizmoProjection,
 } from "@/lib/viewer/MirobotSceneEngine";
-import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useViewerStore, type FrameAxesVisibility } from "@/stores/useViewerStore";
 
 const AXIS_BADGE_COLORS: Record<"x" | "y" | "z", { pos: string; neg: string }> = {
-  x: { pos: "bg-rose-500 text-white border-rose-300", neg: "bg-rose-950/80 text-rose-300 border-rose-500/50" },
-  y: { pos: "bg-emerald-500 text-white border-emerald-300", neg: "bg-emerald-950/80 text-emerald-300 border-emerald-500/50" },
-  z: { pos: "bg-sky-500 text-white border-sky-300", neg: "bg-sky-950/80 text-sky-300 border-sky-500/50" },
+  x: {
+    pos: "bg-rose-500 text-white border-rose-300",
+    neg: "bg-rose-950/80 text-rose-300 border-rose-500/50",
+  },
+  y: {
+    pos: "bg-emerald-500 text-white border-emerald-300",
+    neg: "bg-emerald-950/80 text-emerald-300 border-emerald-500/50",
+  },
+  z: {
+    pos: "bg-sky-500 text-white border-sky-300",
+    neg: "bg-sky-950/80 text-sky-300 border-sky-500/50",
+  },
 };
 
 export function ViewerCanvas() {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<MirobotSceneEngine | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [showTuning, setShowTuning] = useState(false);
+  const [openPopover, setOpenPopover] = useState<"layers" | "light" | null>(null);
   const [gizmoProj, setGizmoProj] = useState<ViewGizmoProjection | null>(null);
   const gizmoDragRef = useRef<{ active: boolean; lastX: number; lastY: number }>({
     active: false,
@@ -39,8 +48,8 @@ export function ViewerCanvas() {
   });
 
   const viewer = useViewerStore();
-  const setHome = useRobotStore((s) => s.setHome);
-  const cancelPath = usePathStore((s) => s.cancelForManualControl);
+  const eePose = useRobotStore((s) => s.eePose);
+  const workspaceStatus = useRobotStore((s) => s.workspaceStatus);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -65,15 +74,22 @@ export function ViewerCanvas() {
     };
   }, []);
 
-  const handleSetHome = () => {
-    cancelPath();
-    setHome();
-  };
+  const activeControlMode =
+    viewer.poseMode === "JOINT"
+      ? "JOINT"
+      : viewer.tcpTransformMode === "rotate"
+        ? "IK_ROTATE"
+        : "IK_MOVE";
 
   const brightnessPct = Math.round(((viewer.sceneBrightness - 0.5) / 4.5) * 100);
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#121417]">
+    <div
+      className="relative h-full w-full overflow-hidden bg-[#121417]"
+      onPointerDown={() => {
+        if (openPopover) setOpenPopover(null);
+      }}
+    >
       {/* WebGL Canvas Host */}
       <div ref={hostRef} className="h-full w-full" />
 
@@ -82,295 +98,318 @@ export function ViewerCanvas() {
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs">
           <div className="flex items-center gap-2.5 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-2.5 text-xs font-medium text-slate-200 shadow-lg">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
-            Loading 6-DOF Mirobot STL models...
+            Loading 6-DOF Mirobot 3D models...
           </div>
         </div>
       )}
 
-      {/* Floating Top Overlay Controls */}
-      <div className="pointer-events-none absolute inset-x-2.5 top-2.5 z-10 flex flex-col gap-1.5">
-        {/* Row 1: Visibility Checkboxes + Tuning Popover */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200/70 bg-white/85 px-3 py-1.5 text-[11px] text-slate-800 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100">
-          {(
-            [
-              ["showGrid", "Grid XY"],
-              ["showZGrid", "Grid Z"],
-              ["showWorldFrame", "Ground Frame"],
-              ["showLinkFrames", "Frames"],
-              ["showTcpFrame", "TCP Frame"],
-              ["showTcpValue", "TCP Value"],
-              ["showWorkspace", "Workspace"],
-              ["showPath", "Path"],
-              ["showPoints", "Points"],
-              ["showPointFrames", "Point Frames"],
-              ["showLabels", "Labels"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+      {/* Top-Left: Simple 3D Interaction Mode Pill */}
+      <div
+        className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-2"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/90 p-1 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
+          <button
+            type="button"
+            onClick={() => viewer.setControlMode("JOINT")}
+            title="Control individual joints J1–J6"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+              activeControlMode === "JOINT"
+                ? "bg-sky-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Hand className="h-3.5 w-3.5" />
+            <span>Joint</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => viewer.setControlMode("IK_MOVE")}
+            title="Drag the TCP arrow gizmo in 3D space (IK Move)"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+              activeControlMode === "IK_MOVE"
+                ? "bg-sky-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Move className="h-3.5 w-3.5" />
+            <span>Drag Move</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => viewer.setControlMode("IK_ROTATE")}
+            title="Rotate the TCP orientation gizmo in 3D space (IK Rotate)"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+              activeControlMode === "IK_ROTATE"
+                ? "bg-sky-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            <span>Drag Rotate</span>
+          </button>
+        </div>
+
+        {/* Contextual IK Solver pill — only shown when dragging / IK mode is active */}
+        {viewer.poseMode === "IK" && (
+          <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-2.5 py-1.5 text-xs shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">IK</span>
+            <select
+              aria-label="IK Solver"
+              value={viewer.ikSolver}
+              onChange={(e) => viewer.setField("ikSolver", e.target.value as IkSolverType)}
+              className="rounded bg-transparent text-xs font-semibold text-slate-800 outline-none dark:text-slate-100"
+            >
+              <option value="CONSTRAINED">Constrained</option>
+              <option value="ANALYTIC">Analytic</option>
+              <option value="DLS">DLS</option>
+            </select>
+            <span className="h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
+            <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
-                checked={Boolean(viewer[key])}
-                onChange={(e) => viewer.setField(key, e.target.checked)}
+                checked={viewer.ikAutoApply}
+                onChange={(e) => viewer.setField("ikAutoApply", e.target.checked)}
                 className="h-3.5 w-3.5 rounded accent-sky-500"
               />
-              <span>{label}</span>
+              Auto
             </label>
-          ))}
+          </div>
+        )}
+      </div>
 
-          <div className="relative ml-auto">
+      {/* Top-Right: Compact Camera, Lighting & Layers Controls */}
+      <div
+        className="absolute top-3 right-3 z-10 flex items-center gap-1.5"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/90 p-1 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
+          <button
+            type="button"
+            onClick={() => engineRef.current?.zoomIn()}
+            title="Zoom In"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => engineRef.current?.zoomOut()}
+            title="Zoom Out"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => engineRef.current?.resetCamera()}
+            title="Reset Camera View"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+
+          <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+
+          {/* Lighting Popover Button */}
+          <div className="relative">
             <button
               type="button"
-              onClick={() => setShowTuning((v) => !v)}
-              title="Frame, axis, and font tuning"
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition ${
-                showTuning
-                  ? "border-sky-500 bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                  : "border-slate-300 bg-white/70 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              onClick={() => setOpenPopover((p) => (p === "light" ? null : "light"))}
+              title="Scene brightness"
+              className={`rounded-lg p-1.5 transition ${
+                openPopover === "light"
+                  ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
               }`}
             >
-              <SlidersHorizontal className="h-3 w-3" />
-              <span>Display</span>
+              <Sun className="h-4 w-4" />
             </button>
 
-            {showTuning && (
-              <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                <div className="mb-2 font-semibold text-slate-700 dark:text-slate-200">
-                  Link Frames (F1–F6)
+            {openPopover === "light" && (
+              <div className="absolute right-0 mt-2.5 w-56 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                <div className="mb-2 flex items-center justify-between font-semibold text-slate-700 dark:text-slate-200">
+                  <span>Scene Brightness</span>
+                  <span className="font-mono text-[11px] text-sky-500">{brightnessPct}%</span>
                 </div>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <label key={i} className="inline-flex cursor-pointer items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={viewer.linkFrameVisibility[i]}
-                        onChange={(e) => viewer.setLinkFrameVisible(i, e.target.checked)}
-                        className="h-3.5 w-3.5 rounded accent-sky-500"
-                      />
-                      <span className="font-mono text-[11px]">F{i + 1}</span>
-                    </label>
-                  ))}
-                </div>
+                <input
+                  type="range"
+                  aria-label="Scene brightness"
+                  min={0.5}
+                  max={5}
+                  step={0.05}
+                  value={viewer.sceneBrightness}
+                  onChange={(e) => viewer.setField("sceneBrightness", Number(e.target.value))}
+                  className="sim-slider w-full"
+                />
+              </div>
+            )}
+          </div>
 
-                <div className="mb-1.5 font-semibold text-slate-700 dark:text-slate-200">
-                  Frame Axes
+          {/* Layers Popover Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenPopover((p) => (p === "layers" ? null : "layers"))}
+              title="Show or hide 3D layers (Grid, Frames, Workspace, Labels)"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                openPopover === "layers"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Layers</span>
+            </button>
+
+            {openPopover === "layers" && (
+              <div className="absolute right-0 mt-2.5 max-h-[75vh] w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                <div className="mb-2 font-semibold text-slate-800 dark:text-slate-100">
+                  3D Display Layers
                 </div>
-                <div className="mb-3 grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-y-2 gap-x-2">
                   {(
                     [
-                      ["xPos", "X+"],
-                      ["yPos", "Y+"],
-                      ["zPos", "Z+"],
-                      ["xNeg", "X-"],
-                      ["yNeg", "Y-"],
-                      ["zNeg", "Z-"],
-                    ] as Array<[keyof FrameAxesVisibility, string]>
-                  ).map(([axisKey, lbl]) => (
-                    <label key={axisKey} className="inline-flex cursor-pointer items-center gap-1">
+                      ["showGrid", "Grid XY"],
+                      ["showZGrid", "Grid Z"],
+                      ["showWorkspace", "Workspace"],
+                      ["showTcpFrame", "TCP Frame"],
+                      ["showTcpValue", "3D TCP Tag"],
+                      ["showWorldFrame", "Ground Frame"],
+                      ["showLinkFrames", "Link Frames"],
+                      ["showPath", "Path Line"],
+                      ["showPoints", "Target Dots"],
+                      ["showPointFrames", "Target Frames"],
+                      ["showLabels", "Labels"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label
+                      key={key}
+                      className="inline-flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-300"
+                    >
                       <input
                         type="checkbox"
-                        checked={viewer.frameAxes[axisKey]}
-                        onChange={(e) => viewer.setFrameAxisVisible(axisKey, e.target.checked)}
+                        checked={Boolean(viewer[key])}
+                        onChange={(e) => viewer.setField(key, e.target.checked)}
                         className="h-3.5 w-3.5 rounded accent-sky-500"
                       />
-                      <span className="font-mono text-[11px]">{lbl}</span>
+                      <span>{label}</span>
                     </label>
                   ))}
                 </div>
 
-                <div className="space-y-2 border-t border-slate-200 pt-2 dark:border-slate-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">Frame Len</span>
-                    <input
-                      type="range"
-                      min={0.03}
-                      max={0.18}
-                      step={0.01}
-                      value={viewer.frameLen}
-                      onChange={(e) => viewer.setField("frameLen", Number(e.target.value))}
-                      className="sim-slider w-32"
-                    />
+                {viewer.showLinkFrames && (
+                  <div className="mt-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                    <div className="mb-1.5 text-[11px] font-semibold text-slate-500">
+                      Visible Link Frames
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <label key={i} className="inline-flex cursor-pointer items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={viewer.linkFrameVisibility[i]}
+                            onChange={(e) => viewer.setLinkFrameVisible(i, e.target.checked)}
+                            className="h-3.5 w-3.5 rounded accent-sky-500"
+                          />
+                          <span className="font-mono text-[11px]">F{i + 1}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">Frame Width</span>
-                    <input
-                      type="range"
-                      min={0.001}
-                      max={0.008}
-                      step={0.0005}
-                      value={viewer.frameWidth}
-                      onChange={(e) => viewer.setField("frameWidth", Number(e.target.value))}
-                      className="sim-slider w-32"
-                    />
+                )}
+
+                <div className="mt-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                  <div className="mb-1.5 text-[11px] font-semibold text-slate-500">
+                    Frame Axes & Gizmo Tuning
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">Label Font</span>
-                    <input
-                      type="range"
-                      min={10}
-                      max={22}
-                      step={1}
-                      value={viewer.labelFontSize}
-                      onChange={(e) => viewer.setField("labelFontSize", Number(e.target.value))}
-                      className="sim-slider w-32"
-                    />
+                  <div className="mb-2.5 grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        ["xPos", "X+"],
+                        ["yPos", "Y+"],
+                        ["zPos", "Z+"],
+                        ["xNeg", "X-"],
+                        ["yNeg", "Y-"],
+                        ["zNeg", "Z-"],
+                      ] as Array<[keyof FrameAxesVisibility, string]>
+                    ).map(([axisKey, lbl]) => (
+                      <label key={axisKey} className="inline-flex cursor-pointer items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={viewer.frameAxes[axisKey]}
+                          onChange={(e) => viewer.setFrameAxisVisible(axisKey, e.target.checked)}
+                          className="h-3.5 w-3.5 rounded accent-sky-500"
+                        />
+                        <span className="font-mono text-[11px]">{lbl}</span>
+                      </label>
+                    ))}
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">Grid Font</span>
-                    <input
-                      type="range"
-                      min={10}
-                      max={22}
-                      step={1}
-                      value={viewer.gridFontSize}
-                      onChange={(e) => viewer.setField("gridFontSize", Number(e.target.value))}
-                      className="sim-slider w-32"
-                    />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-500">Drag Scale</span>
+                      <input
+                        type="range"
+                        min={0.05}
+                        max={1}
+                        step={0.05}
+                        value={viewer.tcpDragScale}
+                        onChange={(e) => viewer.setField("tcpDragScale", Number(e.target.value))}
+                        className="sim-slider w-28"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-500">Frame Len</span>
+                      <input
+                        type="range"
+                        min={0.03}
+                        max={0.16}
+                        step={0.01}
+                        value={viewer.frameLen}
+                        onChange={(e) => viewer.setField("frameLen", Number(e.target.value))}
+                        className="sim-slider w-28"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Row 2: Camera Actions + TCP Drag & IK Controls */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded-xl border border-slate-200/70 bg-white/85 p-1 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80">
-            <button
-              type="button"
-              onClick={() => engineRef.current?.zoomIn()}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200/70 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <ZoomIn className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Zoom In</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => engineRef.current?.zoomOut()}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200/70 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <ZoomOut className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Zoom Out</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => engineRef.current?.resetCamera()}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-200/70 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Reset Camera</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleSetHome}
-              className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
-            >
-              <Home className="h-3.5 w-3.5" />
-              <span>Set Home</span>
-            </button>
+      {/* Bottom-Left: Subtle Live TCP Coordinate HUD */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-col gap-1.5">
+        {workspaceStatus.out && (
+          <div className="rounded-lg border border-rose-500/50 bg-rose-950/85 px-2.5 py-1 text-[11px] font-medium text-rose-200 shadow-md backdrop-blur-sm">
+            {workspaceStatus.message}
           </div>
-
-          {/* TCP / IK Strip */}
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/70 bg-white/85 px-2.5 py-1 text-[11px] text-slate-800 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100">
-            <label className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={viewer.enableTcpMouseDrag}
-                onChange={(e) => viewer.setField("enableTcpMouseDrag", e.target.checked)}
-                className="h-3.5 w-3.5 rounded accent-sky-500"
-              />
-              <span>Mouse Drag TCP</span>
-            </label>
-
-            <label className="inline-flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={viewer.ikAutoApply}
-                disabled={viewer.poseMode !== "IK"}
-                onChange={(e) => viewer.setField("ikAutoApply", e.target.checked)}
-                className="h-3.5 w-3.5 rounded accent-sky-500 disabled:opacity-40"
-              />
-              <span className={viewer.poseMode !== "IK" ? "opacity-50" : ""}>Auto IK</span>
-            </label>
-
-            <div className="inline-flex rounded-md border border-slate-300 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-950">
-              <button
-                type="button"
-                onClick={() => viewer.setField("tcpTransformMode", "translate")}
-                className={`rounded px-2 py-0.5 text-[11px] font-medium ${
-                  viewer.tcpTransformMode === "translate"
-                    ? "bg-sky-600 text-white"
-                    : "text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                Move
-              </button>
-              <button
-                type="button"
-                onClick={() => viewer.setField("tcpTransformMode", "rotate")}
-                className={`rounded px-2 py-0.5 text-[11px] font-medium ${
-                  viewer.tcpTransformMode === "rotate"
-                    ? "bg-sky-600 text-white"
-                    : "text-slate-600 dark:text-slate-400"
-                }`}
-              >
-                Rotate
-              </button>
-            </div>
-
-            <label className="inline-flex items-center gap-1">
-              <span className="text-slate-500 dark:text-slate-400">Scale</span>
-              <input
-                type="number"
-                min={0.05}
-                max={1}
-                step={0.05}
-                value={viewer.tcpDragScale}
-                onChange={(e) => viewer.setField("tcpDragScale", Number(e.target.value))}
-                className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center font-mono text-[11px] outline-none dark:border-slate-700 dark:bg-slate-950"
-              />
-            </label>
-
-            <label className="inline-flex items-center gap-1">
-              <span className="text-slate-500 dark:text-slate-400">Solver</span>
-              <select
-                value={viewer.ikSolver}
-                onChange={(e) => viewer.setField("ikSolver", e.target.value as IkSolverType)}
-                className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-medium outline-none dark:border-slate-700 dark:bg-slate-950"
-              >
-                <option value="CONSTRAINED">Constrained</option>
-                <option value="ANALYTIC">Analytic</option>
-                <option value="DLS">DLS</option>
-              </select>
-            </label>
-          </div>
+        )}
+        <div className="inline-flex items-center gap-3 rounded-xl border border-slate-200/70 bg-white/85 px-3 py-1.5 font-mono text-[11px] text-slate-700 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200">
+          <span className="font-sans text-[10px] font-bold tracking-wider text-sky-600 uppercase dark:text-sky-400">
+            TCP
+          </span>
+          <span>
+            <strong className="text-rose-500">X</strong> {eePose.x.toFixed(1)}
+          </span>
+          <span>
+            <strong className="text-emerald-500">Y</strong> {eePose.y.toFixed(1)}
+          </span>
+          <span>
+            <strong className="text-sky-500">Z</strong> {eePose.z.toFixed(1)} mm
+          </span>
+          <span className="hidden text-slate-400 sm:inline">|</span>
+          <span className="hidden text-slate-500 sm:inline dark:text-slate-400">
+            R {eePose.rx.toFixed(0)}° / {eePose.ry.toFixed(0)}° / {eePose.rz.toFixed(0)}°
+          </span>
         </div>
       </div>
 
-      {/* Left Floating Scene Brightness Slider */}
-      <div
-        className="absolute bottom-5 left-3 z-10 flex flex-col items-center gap-2 rounded-2xl border border-slate-200/70 bg-white/80 px-2 py-3 shadow-lg backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80"
-        title={`Scene brightness: ${brightnessPct}%`}
-      >
-        <Sun className="h-4 w-4 text-amber-400" />
-        <div className="flex h-28 items-center justify-center">
-          <input
-            type="range"
-            aria-label="Scene brightness"
-            min={0.5}
-            max={5}
-            step={0.05}
-            value={viewer.sceneBrightness}
-            onChange={(e) => viewer.setField("sceneBrightness", Number(e.target.value))}
-            className="sim-slider h-1.5 w-24 -rotate-90"
-          />
-        </div>
-        <SunDim className="h-4 w-4 text-slate-400" />
-      </div>
-
-      {/* Bottom-Right Interactive 3D View Gizmo */}
+      {/* Bottom-Right: Interactive 3D View Gizmo */}
       <div
         aria-label="Camera view gizmo"
         onPointerDown={(e) => {
+          e.stopPropagation();
           gizmoDragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
           (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
         }}
@@ -385,9 +424,9 @@ export function ViewerCanvas() {
         onPointerUp={() => {
           gizmoDragRef.current.active = false;
         }}
-        className="absolute right-4 bottom-4 z-10 h-24 w-24 cursor-grab rounded-full border border-slate-300/60 bg-slate-900/65 shadow-lg backdrop-blur-sm active:cursor-grabbing dark:border-slate-700/80"
+        className="absolute right-3 bottom-3 z-10 h-22 w-22 cursor-grab rounded-full border border-slate-300/60 bg-slate-900/65 shadow-lg backdrop-blur-sm active:cursor-grabbing dark:border-slate-700/80"
       >
-        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="-48 -48 96 96">
+        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="-44 -44 88 88">
           {gizmoProj?.axes
             .filter((a) => !a.negative)
             .map((a) => (
@@ -395,8 +434,8 @@ export function ViewerCanvas() {
                 key={a.key}
                 x1={0}
                 y1={0}
-                x2={a.x * 32}
-                y2={a.y * 32}
+                x2={a.x * 29}
+                y2={a.y * 29}
                 stroke={a.axis === "x" ? "#f43f5e" : a.axis === "y" ? "#10b981" : "#38bdf8"}
                 strokeWidth={2}
                 strokeLinecap="round"
@@ -408,8 +447,8 @@ export function ViewerCanvas() {
           .slice()
           .sort((a, b) => a.z - b.z)
           .map((a) => {
-            const left = 48 + a.x * 32;
-            const top = 48 + a.y * 32;
+            const left = 44 + a.x * 29;
+            const top = 44 + a.y * 29;
             const tone = a.negative ? AXIS_BADGE_COLORS[a.axis].neg : AXIS_BADGE_COLORS[a.axis].pos;
             return (
               <button
@@ -423,7 +462,7 @@ export function ViewerCanvas() {
                   top: `${top}px`,
                   opacity: a.z < -0.15 ? 0.55 : 1,
                 }}
-                className={`absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border font-mono text-[9px] font-bold shadow-xs transition-transform hover:scale-110 ${tone}`}
+                className={`absolute flex h-5.5 w-5.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border font-mono text-[9px] font-bold shadow-xs transition-transform hover:scale-110 ${tone}`}
               >
                 {a.label}
               </button>

@@ -22,8 +22,9 @@ export function SimulatorShell() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const mainRowRef = useRef<HTMLDivElement | null>(null);
 
-  const [sidebarPct, setSidebarPct] = useState(26);
-  const [viewerRowPct, setViewerRowPct] = useState(78);
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(340);
+  const [consoleExpanded, setConsoleExpanded] = useState(false);
+  const [consoleHeightPx, setConsoleHeightPx] = useState(170);
   const [draggingSplit, setDraggingSplit] = useState<"sidebar" | "console" | null>(null);
 
   // Modal states
@@ -53,7 +54,7 @@ export function SimulatorShell() {
     useSerialStore.getState().initReady();
   }, []);
 
-  // Global Path Keyboard Shortcuts (matching V2.4.7)
+  // Global Path Keyboard Shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target)) return;
@@ -106,13 +107,11 @@ export function SimulatorShell() {
       if (draggingSplit === "sidebar" && mainRowRef.current) {
         const rect = mainRowRef.current.getBoundingClientRect();
         const rightWidth = rect.right - e.clientX;
-        const pct = Math.min(46, Math.max(18, (rightWidth / rect.width) * 100));
-        setSidebarPct(pct);
+        setSidebarWidthPx(Math.min(480, Math.max(290, Math.round(rightWidth))));
       } else if (draggingSplit === "console" && workspaceRef.current) {
         const rect = workspaceRef.current.getBoundingClientRect();
-        const topHeight = e.clientY - rect.top;
-        const pct = Math.min(92, Math.max(45, (topHeight / rect.height) * 100));
-        setViewerRowPct(pct);
+        const h = rect.bottom - e.clientY;
+        setConsoleHeightPx(Math.min(360, Math.max(100, Math.round(h))));
       }
     };
 
@@ -184,14 +183,13 @@ export function SimulatorShell() {
         onRequestDownloadRobot={() => setDownloadModalOpen(true)}
       />
 
-      {/* Main Vertical Split: (Viewer + Sidebar) over Console */}
+      {/* Main Workspace: 3D Viewport + Control Sidebar + Collapsible Console */}
       <div ref={workspaceRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={mainRowRef}
-          style={{ height: `${viewerRowPct}%` }}
-          className="flex min-h-0 w-full flex-col overflow-hidden md:flex-row"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row"
         >
-          {/* 3D Viewport */}
+          {/* Unobstructed 3D Viewport */}
           <div className="min-h-0 min-w-0 flex-1">
             <ViewerCanvas />
           </div>
@@ -204,23 +202,17 @@ export function SimulatorShell() {
             tabIndex={0}
             onPointerDown={() => setDraggingSplit("sidebar")}
             onKeyDown={(e) => {
-              if (e.key === "ArrowLeft") setSidebarPct((p) => Math.min(46, p + 2));
-              if (e.key === "ArrowRight") setSidebarPct((p) => Math.max(18, p - 2));
+              if (e.key === "ArrowLeft") setSidebarWidthPx((w) => Math.min(480, w + 16));
+              if (e.key === "ArrowRight") setSidebarWidthPx((w) => Math.max(290, w - 16));
             }}
-            className={`hidden w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-slate-200 transition hover:bg-sky-500/60 md:flex dark:bg-slate-800 ${
+            className={`hidden w-1 shrink-0 cursor-col-resize bg-slate-200 transition hover:bg-sky-500/70 md:block dark:bg-slate-800 ${
               draggingSplit === "sidebar" ? "bg-sky-500" : ""
             }`}
           />
 
-          {/* Control Sidebar */}
-          <div
-            style={{ width: undefined }}
-            className="h-72 shrink-0 overflow-hidden md:h-full"
-          >
-            <div
-              className="hidden h-full md:block"
-              style={{ width: `clamp(290px, ${sidebarPct}vw, 520px)` }}
-            >
+          {/* Right Control Sidebar */}
+          <div className="h-72 shrink-0 overflow-hidden md:h-full">
+            <div className="hidden h-full md:block" style={{ width: `${sidebarWidthPx}px` }}>
               <ControlSidebar
                 onRequestRenameTarget={(index, name) =>
                   setRenameTargetState({ open: true, index, name })
@@ -239,27 +231,29 @@ export function SimulatorShell() {
           </div>
         </div>
 
-        {/* Vertical Resizer (Viewer vs Console) */}
-        <div
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize simulator and console"
-          tabIndex={0}
-          onPointerDown={() => setDraggingSplit("console")}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowUp") setViewerRowPct((p) => Math.max(45, p - 3));
-            if (e.key === "ArrowDown") setViewerRowPct((p) => Math.min(92, p + 3));
-          }}
-          className={`flex h-2 shrink-0 cursor-row-resize items-center justify-center bg-slate-200 transition hover:bg-sky-500/50 dark:bg-slate-800 ${
-            draggingSplit === "console" ? "bg-sky-500" : ""
-          }`}
-        >
-          <span className="h-0.5 w-10 rounded-full bg-slate-400/70 dark:bg-slate-500" />
-        </div>
+        {/* Vertical Resizer (only when console is expanded) */}
+        {consoleExpanded && (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize console height"
+            tabIndex={0}
+            onPointerDown={() => setDraggingSplit("console")}
+            className={`flex h-1.5 shrink-0 cursor-row-resize items-center justify-center bg-slate-200 transition hover:bg-sky-500/60 dark:bg-slate-800 ${
+              draggingSplit === "console" ? "bg-sky-500" : ""
+            }`}
+          />
+        )}
 
-        {/* Bottom Console */}
-        <div style={{ height: `${100 - viewerRowPct}%` }} className="min-h-0 overflow-hidden">
-          <SerialConsole />
+        {/* Collapsible Bottom Console */}
+        <div
+          style={{ height: consoleExpanded ? `${consoleHeightPx}px` : "36px" }}
+          className="shrink-0 overflow-hidden transition-[height] duration-150"
+        >
+          <SerialConsole
+            expanded={consoleExpanded}
+            onToggleExpand={() => setConsoleExpanded((v) => !v)}
+          />
         </div>
       </div>
 
@@ -281,8 +275,8 @@ export function SimulatorShell() {
 
       <TextPromptModal
         open={renameTargetState.open}
-        title="Rename Target"
-        description="Enter a new label for the selected taught target."
+        title="Rename Waypoint"
+        description="Enter a new label for the selected waypoint."
         initialValue={renameTargetState.name}
         confirmLabel="Rename"
         onConfirm={(next) => renameTarget(renameTargetState.index, next)}
@@ -291,8 +285,8 @@ export function SimulatorShell() {
 
       <ConfirmModal
         open={confirmClearOpen}
-        title="Clear All Targets?"
-        message="This removes all taught path targets from the current program (you can still Undo)."
+        title="Clear All Waypoints?"
+        message="This removes all waypoints from the current path (you can still Undo)."
         confirmLabel="Clear All"
         danger
         onConfirm={() => clearTargets()}

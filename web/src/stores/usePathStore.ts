@@ -94,6 +94,7 @@ interface PathState {
   advancePlaybackFrame: (dtMs: number) => void;
 
   // Program I/O
+  loadDemoPath: () => void;
   newProgram: () => void;
   importProgramText: (filename: string, content: string) => { warnings: string[] };
   exportJsonString: () => string;
@@ -654,6 +655,37 @@ export const usePathStore = create<PathState>((set, get) => ({
         }
       }
     }
+  },
+
+  loadDemoPath() {
+    const demoConfigs: Array<{ name: string; joints: number[] }> = [
+      { name: "Home", joints: [0, 0, 0, 0, 0, 0] },
+      { name: "Pick Ready", joints: [-35, 22, -28, 0, -15, 0] },
+      { name: "Lift & Swing", joints: [20, 5, -10, 15, -25, 30] },
+      { name: "Place", joints: [45, 26, -32, 0, -12, -20] },
+      { name: "Return Home", joints: [0, 0, 0, 0, 0, 0] },
+    ];
+    const targets: PathTarget[] = demoConfigs.map((item, idx) => ({
+      id: idx + 1,
+      name: item.name,
+      joints: item.joints,
+      ...fkPose6DFromJointsDeg(item.joints),
+    }));
+
+    useRobotStore.getState().setJoints(targets[0].joints, { syncIk: true });
+    set({
+      targets,
+      nextId: targets.length + 1,
+      activeTargetIndex: 0,
+      status: "IDLE",
+      currentSegment: 0,
+      segmentElapsedMs: 0,
+      trajectoryTelemetry: emptyTelemetry(0, `${targets[0].name} -> ${targets[1].name}`, 0),
+      undoStack: [],
+      redoStack: [],
+    });
+    useProjectStore.getState().setName("Demo Pick & Place", false);
+    logPath("Loaded 5-point Demo Pick & Place path — press Play to simulate", "ok");
   },
 
   newProgram() {
