@@ -42,6 +42,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
   const rxCount = useHardwareStore((s) => s.rxCount);
   const txCount = useHardwareStore((s) => s.txCount);
   const hmiCount = useHardwareStore((s) => s.hmiCount);
+  const idxTelemetry = useHardwareStore((s) => s.idxTelemetry);
   const controllerState = useHardwareStore((s) => s.controllerState);
   const lastRx = useHardwareStore((s) => s.lastRx);
   const lastError = useHardwareStore((s) => s.lastError);
@@ -54,6 +55,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
   const connectSerial = useHardwareStore((s) => s.connectSerial);
   const connectWebSocket = useHardwareStore((s) => s.connectWebSocket);
   const disconnect = useHardwareStore((s) => s.disconnect);
+  const sendRawLine = useHardwareStore((s) => s.sendRawLine);
   const handleIncomingLine = useHardwareStore((s) => s.handleIncomingLine);
 
   const hasWebSerial = typeof navigator !== "undefined" && "serial" in navigator;
@@ -278,6 +280,108 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     Open in Chrome / Edge to access USB-RS485 Web Serial.
                   </span>
                 )}
+              </div>
+
+              {/* Live IDX-485 Sorting Station Telemetry + Virtual HMI-485 (@99) Controls */}
+              <div className="space-y-2 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-indigo-700 dark:text-indigo-300">
+                    IDX-485 Sorting Station Monitor &amp; Virtual HMI (@99)
+                  </span>
+                  {idxTelemetry ? (
+                    <span
+                      className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
+                        idxTelemetry.stateId === 16
+                          ? "bg-rose-500/20 text-rose-500"
+                          : idxTelemetry.stateId === 3
+                            ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                            : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                      }`}
+                    >
+                      {idxTelemetry.stateName}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[10px] text-slate-400">
+                      Waiting for @99o200=... from IDX-485
+                    </span>
+                  )}
+                </div>
+
+                {idxTelemetry && (
+                  <div className="grid grid-cols-2 gap-1.5 font-mono text-[11px] sm:grid-cols-4">
+                    <div className="rounded bg-white/80 px-2 py-1 dark:bg-slate-950/60">
+                      Light A0: <strong>{idxTelemetry.lightAdc}</strong>
+                    </div>
+                    <div
+                      className={`rounded px-2 py-1 ${
+                        idxTelemetry.currentAdc > 3300
+                          ? "bg-rose-500/20 text-rose-500"
+                          : "bg-white/80 dark:bg-slate-950/60"
+                      }`}
+                    >
+                      Curr A5: <strong>{idxTelemetry.currentAdc}</strong>
+                    </div>
+                    <div className="rounded bg-white/80 px-2 py-1 dark:bg-slate-950/60">
+                      OK/NG: <strong>{idxTelemetry.okCount}</strong>/
+                      <strong>{idxTelemetry.ngCount}</strong>
+                    </div>
+                    <div className="rounded bg-white/80 px-2 py-1 dark:bg-slate-950/60">
+                      OUT: {idxTelemetry.out8 ? "8" : "-"} {idxTelemetry.out9 ? "9" : "-"}{" "}
+                      {idxTelemetry.out10 ? "10" : "-"}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i201=1")}
+                    className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
+                  >
+                    HMI START
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i202=1")}
+                    className="rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500 disabled:opacity-40"
+                  >
+                    HMI STOP
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i203=1")}
+                    className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+                  >
+                    HMI RESET
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i204=1")}
+                    className="rounded-md bg-amber-500 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-amber-400 disabled:opacity-40"
+                  >
+                    PAUSE / RESUME
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i200=1")}
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    AUTO
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => void sendRawLine("@99i200=0")}
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    MANUAL
+                  </button>
+                </div>
               </div>
             </div>
           )}

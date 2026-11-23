@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HOME_JOINTS } from "../kinematics/constants";
-import { fkPose6DFromJointsDeg } from "../kinematics/fk";
+import { fkPose6DFromJointsDeg, pose6DToTargetMatrix } from "../kinematics/fk";
+import { solveIKPoseCandidate } from "../kinematics/ik";
 import {
   formatO103StatusReply,
   formatWlkataStatusReport,
@@ -79,5 +80,24 @@ describe("IDX-485 / HMI-485 / WLKATA Mirobot RS-485 Protocol Parser", () => {
     expect(reply).toContain("<Idle,Angle(ABCDXYZ):");
     expect(reply).toContain("Cartesian coordinate(XYZ RxRyRz):198.67,0.00,230.72");
     expect(reply).toContain("Pump PWM:1000,Valve PWM:65");
+  });
+
+  it("solves all 6 Cartesian poses from idx485-sorting-station.ino", () => {
+    const poses = [
+      { name: "Above Pick", x: 200, y: 0, z: 150, rx: 0, ry: 0, rz: 0 },
+      { name: "Pick Down", x: 200, y: 0, z: 80, rx: 0, ry: 0, rz: 0 },
+      { name: "OK Above", x: 150, y: 150, z: 150, rx: 0, ry: 0, rz: 0 },
+      { name: "OK Down", x: 150, y: 150, z: 85, rx: 0, ry: 0, rz: 0 },
+      { name: "NG Above", x: 150, y: -150, z: 150, rx: 0, ry: 0, rz: 0 },
+      { name: "NG Down", x: 150, y: -150, z: 85, rx: 0, ry: 0, rz: 0 },
+    ];
+    let seed = HOME_JOINTS.slice();
+    for (const p of poses) {
+      const res = solveIKPoseCandidate(seed, pose6DToTargetMatrix(p), "CONSTRAINED");
+      expect(res).not.toBeNull();
+      expect(res!.err.posMm).toBeLessThan(5);
+      expect(res!.err.rotDeg).toBeLessThan(5);
+      seed = res!.q;
+    }
   });
 });

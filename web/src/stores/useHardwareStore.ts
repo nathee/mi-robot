@@ -18,6 +18,61 @@ import { useViewerStore } from "./useViewerStore";
 export type HardwareTransport = "NONE" | "SERIAL" | "WEBSOCKET";
 export type HardwareMotionMode = "SMOOTH" | "INSTANT";
 
+export interface IdxSortingTelemetry {
+  stateId: number;
+  stateName: string;
+  lightAdc: number;
+  currentAdc: number;
+  okCount: number;
+  ngCount: number;
+  out8: boolean;
+  out9: boolean;
+  out10: boolean;
+  updatedAt: number;
+}
+
+const IDX_SORTING_STATES = [
+  "BOOT",
+  "HOMING",
+  "IDLE",
+  "WAITING PART (GPIO23)",
+  "INSPECTING",
+  "MOVE ABOVE PICK",
+  "PICK DOWN",
+  "SUCTION ON",
+  "PICK UP",
+  "MOVE PLACE",
+  "PLACE DOWN",
+  "SUCTION OFF",
+  "PLACE UP",
+  "RETURN STANDBY",
+  "MANUAL",
+  "PAUSED",
+  "ALARM E-STOP",
+];
+
+function parseIdxSortingTelemetry(line: string): IdxSortingTelemetry | null {
+  if (!line.startsWith("@99o200=")) return null;
+  const nums = line
+    .slice(8)
+    .split(",")
+    .map((s) => Number(s.trim()));
+  if (nums.length < 8 || nums.slice(0, 8).some((n) => !Number.isFinite(n))) return null;
+  const stateId = nums[0];
+  return {
+    stateId,
+    stateName: IDX_SORTING_STATES[stateId] ?? `STATE_${stateId}`,
+    lightAdc: nums[1],
+    currentAdc: nums[2],
+    okCount: nums[3],
+    ngCount: nums[4],
+    out8: nums[5] !== 0,
+    out9: nums[6] !== 0,
+    out10: nums[7] !== 0,
+    updatedAt: Date.now(),
+  };
+}
+
 interface SerialPortLike {
   open: (options: { baudRate: number }) => Promise<void>;
   close: () => Promise<void>;
@@ -49,6 +104,7 @@ interface HardwareState {
   rxCount: number;
   txCount: number;
   hmiCount: number;
+  idxTelemetry: IdxSortingTelemetry | null;
   lastRx: string;
   lastError: string;
   smoothTarget: SmoothMoveTarget | null;
@@ -90,6 +146,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
   rxCount: 0,
   txCount: 0,
   hmiCount: 0,
+  idxTelemetry: null,
   lastRx: "",
   lastError: "",
   smoothTarget: null,
@@ -145,10 +202,24 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       addressFilter: state.addressFilter,
     });
 
-    // Shared RS-485 Bus Monitor for HMI-485 (@99...): display silently, NEVER reply!
+    // Shared RS-485 Bus Monitor for HMI-485 (@99...): decode telemetry silently, NEVER reply!
     if (cmd.kind === "HMI_BUS") {
-      set((s) => ({ hmiCount: s.hmiCount + 1, lastRx: trimmed }));
-      useSerialStore.getState().appendLog({ dir: "sys", text: `[HMI @99] ${trimmed}` });
+      const parsedIdx = parseIdxSortingTelemetry(trimmed);
+      set((s) => ({
+        hmiCount: s.hmiCount + 1,
+        lastRx: trimmed,
+        ...(parsedIdx ? { idxTelemetry: parsedIdx } : {}),
+      }));
+      // Avoid flooding console with 4Hz @99o200 telemetry; log non-telemetry HMI frames or state changes
+      const prevState = state.idxTelemetry?.stateId;
+      if (!parsedIdx || parsedIdx.stateId !== prevState) {
+        useSerialStore.getState().appendLog({
+          dir: "sys",
+          text: parsedIdx
+            ? `[IDX-485] State -> ${parsedIdx.stateName} (Light:${parsedIdx.lightAdc} A5:${parsedIdx.currentAdc} OK:${parsedIdx.okCount} NG:${parsedIdx.ngCount})`
+            : `[HMI @99] ${trimmed}`,
+        });
+      }
       return;
     }
 
@@ -358,6 +429,20 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
 
     if (nextElapsed >= target.durationMs) {
       set({ smoothTarget: null, controllerState: "Idle" });
+      // Proactively emit <Idle,...> on move/homing completion so sketches like
+      // idx485-sorting-station.ino (which wait for "Idle" without polling @01?) advance cleanly!
+      if (state.autoReply && state.connected) {
+        const robot = useRobotStore.getState();
+        const report = formatWlkataStatusReport({
+          state: "Idle",
+          joints: robot.joints,
+          eePose: robot.eePose,
+          pumpPwm: state.pumpPwm,
+          valvePwm: state.valvePwm,
+          motionMode: state.lastMotionSpace,
+        });
+        void get().sendRawLine(report);
+      }
     } else {
       set({ smoothTarget: { ...target, elapsedMs: nextElapsed } });
     }
