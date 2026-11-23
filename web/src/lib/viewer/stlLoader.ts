@@ -1,0 +1,88 @@
+import {
+  CylinderGeometry,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+} from "three";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { LINK_NAMES, STL_MESH_COLORS } from "@/lib/kinematics/constants";
+
+export interface LoadedRobotMeshes {
+  base: Object3D;
+  links: Map<string, Object3D>;
+}
+
+/**
+ * Loads base.stl and link1.stl..link6.stl from /models/ and builds the exact
+ * V2.4.7 scene hierarchy (link1..link6 mounted under base).
+ */
+export function loadMirobotSTLs(
+  targetGroup: Group,
+  basePath = "/models"
+): Promise<LoadedRobotMeshes> {
+  const loader = new STLLoader();
+  const names = ["base", ...LINK_NAMES];
+
+  const loadOne = (name: string): Promise<Mesh> =>
+    new Promise((resolve) => {
+      const url = `${basePath}/${name}.stl`;
+      loader.load(
+        url,
+        (geo) => {
+          geo.computeVertexNormals();
+          const mat = new MeshStandardMaterial({
+            color: STL_MESH_COLORS[name] ?? 0xbdbdbd,
+            metalness: 0.2,
+            roughness: 0.7,
+          });
+          const mesh = new Mesh(geo, mat);
+          mesh.name = name;
+          resolve(mesh);
+        },
+        undefined,
+        () => {
+          const fallbackGeo = new CylinderGeometry(0.015, 0.015, 0.02, 12);
+          const fallbackMat = new MeshStandardMaterial({ color: 0x777777 });
+          const mesh = new Mesh(fallbackGeo, fallbackMat);
+          mesh.name = name;
+          resolve(mesh);
+        }
+      );
+    });
+
+  return Promise.all(names.map(loadOne)).then((meshes) => {
+    const byName = new Map<string, Mesh>();
+    meshes.forEach((m) => byName.set(m.name, m));
+
+    const base = byName.get("base")!;
+    targetGroup.add(base);
+
+    const links = new Map<string, Object3D>();
+    LINK_NAMES.forEach((linkName) => {
+      const linkMesh = byName.get(linkName);
+      if (linkMesh) {
+        base.add(linkMesh);
+        links.set(linkName, linkMesh);
+      }
+    });
+
+    return { base, links };
+  });
+}
+
+export function disposeObjectTree(root: Object3D | null | undefined): void {
+  if (!root) return;
+  root.traverse((obj) => {
+    const mesh = obj as Mesh;
+    if (mesh.geometry) {
+      mesh.geometry.dispose();
+    }
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.filter(Boolean).forEach((mat) => {
+      const anyMat = mat as unknown as { map?: { dispose?: () => void }; dispose?: () => void };
+      anyMat.map?.dispose?.();
+      anyMat.dispose?.();
+    });
+  });
+}
