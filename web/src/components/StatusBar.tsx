@@ -52,7 +52,7 @@ export function StatusBar() {
           >
             WLKATA Robotics
           </a>{" "}
-          • Produced by{" "}
+          and{" "}
           <a
             href="https://www.inex.co.th/"
             target="_blank"
@@ -61,6 +61,15 @@ export function StatusBar() {
           >
             Innovative Experiment Co., Ltd., Thailand
           </a>
+          • Produced by{" "}
+          <a
+            href="https://cms.eleccom.in.th/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sky-600 hover:underline dark:text-sky-400"
+          >
+            Eleccom, Thailand
+          </a>
         </span>
 
         <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
@@ -68,7 +77,7 @@ export function StatusBar() {
         </span>
 
         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          V2.4.7
+          v0.0.1
         </span>
       </div>
     </footer>

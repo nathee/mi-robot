@@ -6,7 +6,7 @@
 
 ## What the app is
 
-"Mi Robot Simulator" (Mirobot Simulator V2.4.7) — a **6-DOF robot arm simulator**
+"Mi Robot Simulator" (Mirobot Simulator v0.0.1) — a **6-DOF robot arm simulator**
 (credits: WLKATA Robotics • Innovative Experiment Co., Ltd., Thailand).
 Vue 3 + Element Plus + three.js (WebGL) single-page app. Features: FK/IK
 (analytic / constrained / DLS solvers), joint & linear jog, workspace & path
