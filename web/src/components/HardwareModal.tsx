@@ -41,6 +41,8 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
   const autoReply = useHardwareStore((s) => s.autoReply);
   const rxCount = useHardwareStore((s) => s.rxCount);
   const txCount = useHardwareStore((s) => s.txCount);
+  const hmiCount = useHardwareStore((s) => s.hmiCount);
+  const controllerState = useHardwareStore((s) => s.controllerState);
   const lastRx = useHardwareStore((s) => s.lastRx);
   const lastError = useHardwareStore((s) => s.lastError);
 
@@ -158,12 +160,20 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
               </span>
             </div>
             <div className="flex items-center gap-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {controllerState}
+              </span>
               <span>
                 RX: <strong className="text-emerald-500">{rxCount}</strong>
               </span>
               <span>
                 TX: <strong className="text-sky-500">{txCount}</strong>
               </span>
+              {hmiCount > 0 && (
+                <span>
+                  HMI @99: <strong className="text-purple-400">{hmiCount}</strong>
+                </span>
+              )}
             </div>
           </div>
 
@@ -315,13 +325,13 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
             <div className="space-y-3">
               <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
                 <div className="font-semibold text-sky-700 dark:text-sky-300">
-                  Wiring: ESP32 + RS485 Module ↔ USB-to-RS485 Adapter
+                  OVEC / IDX-485 (ESP32-C5) + HMI-485 + USB-RS485 Shared Bus Wiring
                 </div>
                 <div className="mt-1.5 grid grid-cols-1 gap-1 font-mono text-[11px] text-slate-700 sm:grid-cols-2 dark:text-slate-300">
-                  <div>ESP32 GPIO17 (TX2) → RS485 DI/TXD</div>
-                  <div>ESP32 GPIO16 (RX2) → RS485 RO/RXD</div>
-                  <div>ESP32 GPIO4 → MAX485 DE+RE (or skip on XY-485)</div>
-                  <div>RS485 A ↔ USB-RS485 A · B ↔ B · GND ↔ GND</div>
+                  <div>IDX-485 RS-485: GPIO4 (RX2) / GPIO5 (TX2) @ 115200</div>
+                  <div>IDX-485 +A ↔ USB-RS485 A · -B ↔ B · S.GND ↔ GND</div>
+                  <div>HMI-485 (@99): Parallel on same A/B bus (sniffed safely)</div>
+                  <div>Supports both Raw @01 G-Code &amp; &lt;Mirobot.h&gt; library!</div>
                 </div>
               </div>
 
@@ -388,12 +398,16 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {[
-                  { label: "WLKATA MoveJ", cmd: "@01 M21 G90 X-35 Y22 Z-28 A0 B-15 C0 F3000" },
-                  { label: "JSON + Grip", cmd: '@01 {"j":[40, 20, -25, 0, -15, 10], "grip":1}' },
-                  { label: "MoveL XYZ", cmd: "@01 M20 G90 G1 X210 Y40 Z200 A0 B0 C0 F4800" },
-                  { label: "Grip Open", cmd: "@01 M5" },
-                  { label: "Home", cmd: "@01 $H" },
-                  { label: "Status ?", cmd: "@01 ?" },
+                  { label: "IDX $H Home", cmd: "@01$H" },
+                  { label: "IDX MoveJ", cmd: "@01M21 G90 G00 X35 Y22 Z-15 A0 B-10 C0 F2000" },
+                  { label: "Pump ON (M3)", cmd: "@01M3 S1000" },
+                  { label: "Pump OFF", cmd: "@01M3 S0" },
+                  { label: "Gripper M4", cmd: "@01M4 E65" },
+                  { label: "Pause (!)", cmd: "@01!" },
+                  { label: "Resume (~)", cmd: "@01~" },
+                  { label: "Query ?", cmd: "@01?" },
+                  { label: "Lib O103", cmd: "@01O103" },
+                  { label: "HMI @99", cmd: "@99o200=72,1,1" },
                 ].map((preset) => (
                   <button
                     key={preset.label}

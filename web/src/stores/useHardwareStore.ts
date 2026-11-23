@@ -4,8 +4,10 @@ import { pose6DToTargetMatrix } from "@/lib/kinematics/fk";
 import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
 import { pathTrajectorySample } from "@/lib/path/trajectory";
 import {
+  formatO103StatusReply,
   formatWlkataStatusReport,
   parseIncomingHardwareLine,
+  type VirtualControllerState,
 } from "@/lib/hardware/protocol";
 import { useCodeStore } from "./useCodeStore";
 import { usePathStore } from "./usePathStore";
@@ -28,6 +30,7 @@ interface SmoothMoveTarget {
   targetJoints: number[];
   elapsedMs: number;
   durationMs: number;
+  kind: "MOVE" | "HOME" | "WAIT";
 }
 
 interface HardwareState {
@@ -38,8 +41,14 @@ interface HardwareState {
   addressFilter: string;
   motionMode: HardwareMotionMode;
   autoReply: boolean;
+  controllerState: VirtualControllerState;
+  lastMotionSpace: "Angle" | "Cartesian";
+  defaultFeed: number;
+  pumpPwm: number;
+  valvePwm: number;
   rxCount: number;
   txCount: number;
+  hmiCount: number;
   lastRx: string;
   lastError: string;
   smoothTarget: SmoothMoveTarget | null;
@@ -70,11 +79,17 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
   transport: "NONE",
   baudRate: 115200,
   wsUrl: "ws://192.168.1.50:81",
-  addressFilter: "ANY",
+  addressFilter: "01",
   motionMode: "SMOOTH",
   autoReply: true,
+  controllerState: "Idle",
+  lastMotionSpace: "Angle",
+  defaultFeed: 2000,
+  pumpPwm: 0,
+  valvePwm: 0,
   rxCount: 0,
   txCount: 0,
+  hmiCount: 0,
   lastRx: "",
   lastError: "",
   smoothTarget: null,
@@ -110,7 +125,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         return;
       }
       set((s) => ({ txCount: s.txCount + 1 }));
-      useSerialStore.getState().appendLog({ dir: "out", text: `[RS485] ${clean}` });
+      useSerialStore.getState().appendLog({ dir: "out", text: `[RS485 TX] ${clean}` });
     } catch (err) {
       set({ lastError: err instanceof Error ? err.message : "TX failed" });
     }
@@ -122,76 +137,191 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
 
     const state = get();
     const robot = useRobotStore.getState();
-    set((s) => ({ rxCount: s.rxCount + 1, lastRx: trimmed, lastError: "" }));
-    useSerialStore.getState().appendLog({ dir: "in", text: `[RS485] ${trimmed}` });
 
     const cmd = parseIncomingHardwareLine(trimmed, {
       currentJoints: robot.joints,
+      defaultMotionMode: state.lastMotionSpace,
+      defaultFeed: state.defaultFeed,
       addressFilter: state.addressFilter,
     });
 
+    // Shared RS-485 Bus Monitor for HMI-485 (@99...): display silently, NEVER reply!
+    if (cmd.kind === "HMI_BUS") {
+      set((s) => ({ hmiCount: s.hmiCount + 1, lastRx: trimmed }));
+      useSerialStore.getState().appendLog({ dir: "sys", text: `[HMI @99] ${trimmed}` });
+      return;
+    }
+
     if (cmd.kind === "IGNORED") return;
+
+    set((s) => ({ rxCount: s.rxCount + 1, lastRx: trimmed, lastError: "" }));
+    useSerialStore.getState().appendLog({ dir: "in", text: `[RS485 RX] ${trimmed}` });
+
+    const replyIfEnabled = (msg: string) => {
+      if (!state.autoReply) return;
+      if (state.connected) {
+        void get().sendRawLine(msg);
+      } else {
+        useSerialStore.getState().appendLog({ dir: "out", text: `[VIRTUAL TX] ${msg}` });
+      }
+    };
 
     if (cmd.kind === "ERROR") {
       set({ lastError: cmd.message });
       useSerialStore.getState().appendLog({ dir: "error", text: `[RS485] ${cmd.message}` });
-      if (state.autoReply && state.connected) {
-        void get().sendRawLine(`error:${cmd.message}`);
-      }
+      replyIfEnabled(`error:${cmd.message}`);
       return;
     }
 
+    // Status queries (`@01?` or `@01O103`)
     if (cmd.kind === "STATUS_QUERY") {
-      const report = formatWlkataStatusReport({
-        state: state.smoothTarget ? "Run" : "Idle",
-        joints: robot.joints,
-        eePose: robot.eePose,
-        gripperPwm: robot.gripperPwm,
-      });
-      if (state.connected) {
-        void get().sendRawLine(report);
-      } else {
-        useSerialStore.getState().appendLog({ dir: "out", text: `[VIRTUAL] ${report}` });
-      }
+      const effectiveState: VirtualControllerState =
+        useCodeStore.getState().status === "RUNNING" || usePathStore.getState().status === "PLAYING"
+          ? "Run"
+          : get().controllerState;
+
+      const reply =
+        cmd.format === "O103"
+          ? formatO103StatusReply(effectiveState)
+          : formatWlkataStatusReport({
+              state: effectiveState,
+              joints: robot.joints,
+              eePose: robot.eePose,
+              pumpPwm: state.pumpPwm,
+              valvePwm: state.valvePwm,
+              motionMode: state.lastMotionSpace,
+            });
+      replyIfEnabled(reply);
       return;
     }
 
-    // Cancel local playback so hardware commands take priority
+    // Feed Hold / Pause (`@01!`)
+    if (cmd.kind === "PAUSE") {
+      set({ controllerState: "Hold" });
+      if (usePathStore.getState().status === "PLAYING") usePathStore.getState().togglePlayback();
+      if (useCodeStore.getState().status === "RUNNING") useCodeStore.getState().runOrPause();
+      useSerialStore.getState().appendLog({ dir: "sys", text: "[RS485] Feed Hold / PAUSED (@01!)" });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    // Cycle Start / Resume (`@01~`)
+    if (cmd.kind === "RESUME") {
+      const hasMove = Boolean(get().smoothTarget);
+      set({ controllerState: hasMove ? "Run" : "Idle" });
+      if (usePathStore.getState().status === "PAUSED") usePathStore.getState().togglePlayback();
+      if (useCodeStore.getState().status === "PAUSED") useCodeStore.getState().runOrPause();
+      useSerialStore.getState().appendLog({ dir: "ok", text: "[RS485] Resumed (@01~)" });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    // Controller Reset (`@01%`)
+    if (cmd.kind === "RESET") {
+      usePathStore.getState().stopPlayback();
+      useCodeStore.getState().stop();
+      set({ controllerState: "Idle", smoothTarget: null });
+      useSerialStore.getState().appendLog({ dir: "sys", text: "[RS485] Controller Reset (@01%)" });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    if (cmd.kind === "SET_SPEED") {
+      set({ defaultFeed: Math.max(100, Math.min(10000, cmd.feed)) });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    if (cmd.kind === "ACK_ONLY") {
+      useSerialStore.getState().appendLog({ dir: "sys", text: `[RS485] ${cmd.note}` });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    // Run saved file (`@010111=vec2501` or `@01o111...`)
+    if (cmd.kind === "RUN_FILE") {
+      useSerialStore.getState().appendLog({
+        dir: "ok",
+        text: `[RS485] Running virtual saved file "${cmd.fileName}"`,
+      });
+      const path = usePathStore.getState();
+      if (path.targets.length >= 2) {
+        path.resetPlayback();
+        path.togglePlayback();
+      } else {
+        // Run the Code tab demo program if Path is empty
+        useCodeStore.getState().runOrPause();
+      }
+      replyIfEnabled("ok");
+      return;
+    }
+
+    // Cancel local playback when direct hardware motion arrives
     usePathStore.getState().cancelForManualControl();
     useCodeStore.getState().stop();
 
-    const applyJointTarget = (targetJoints: number[], feedDegPerMin = 3000) => {
-      if (state.motionMode === "INSTANT") {
-        set({ smoothTarget: null });
+    const startSmoothJointMove = (
+      targetJoints: number[],
+      feedDegPerMin: number,
+      moveKind: "MOVE" | "HOME" = "MOVE"
+    ) => {
+      if (state.motionMode === "INSTANT" && moveKind !== "HOME") {
+        set({ smoothTarget: null, controllerState: "Idle" });
         useRobotStore.getState().setJoints(targetJoints, { syncIk: true });
-      } else {
-        const startJoints = useRobotStore.getState().joints.slice();
-        const maxTravel = targetJoints.reduce(
-          (max, q, i) => Math.max(max, Math.abs(q - (startJoints[i] ?? 0))),
-          0
-        );
-        const degPerSec = Math.max(10, feedDegPerMin / 60);
-        const durationMs = Math.max(120, (maxTravel * 1.45 * 1000) / degPerSec);
-        set({
-          smoothTarget: {
-            startJoints,
-            targetJoints: targetJoints.slice(),
-            elapsedMs: 0,
-            durationMs,
-          },
-        });
+        return;
       }
+
+      const startJoints = useRobotStore.getState().joints.slice();
+      const maxTravel = targetJoints.reduce(
+        (max, q, i) => Math.max(max, Math.abs(q - (startJoints[i] ?? 0))),
+        0
+      );
+      const degPerSec = Math.max(10, feedDegPerMin / 60);
+      const durationMs =
+        moveKind === "HOME"
+          ? Math.max(1200, (maxTravel * 1.6 * 1000) / degPerSec)
+          : Math.max(220, (maxTravel * 1.45 * 1000) / degPerSec);
+
+      set({
+        controllerState: moveKind === "HOME" ? "Home" : "Run",
+        smoothTarget: {
+          startJoints,
+          targetJoints: targetJoints.slice(),
+          elapsedMs: 0,
+          durationMs,
+          kind: moveKind,
+        },
+      });
     };
 
     if (cmd.kind === "HOME") {
-      applyJointTarget(HOME_JOINTS.slice(), 3200);
+      startSmoothJointMove(HOME_JOINTS.slice(), 2400, "HOME");
+    } else if (cmd.kind === "WAIT") {
+      const curr = robot.joints.slice();
+      set({
+        controllerState: "Run",
+        smoothTarget: {
+          startJoints: curr,
+          targetJoints: curr,
+          elapsedMs: 0,
+          durationMs: Math.max(100, cmd.durationMs),
+          kind: "WAIT",
+        },
+      });
     } else if (cmd.kind === "GRIPPER") {
       robot.setGripper(cmd.state, cmd.pwm);
+      const isValve = /M4/i.test(cmd.raw);
+      set({
+        pumpPwm: isValve ? state.pumpPwm : cmd.pwm,
+        valvePwm: isValve ? cmd.pwm : state.valvePwm,
+      });
     } else if (cmd.kind === "MOVE_JOINT") {
       if (cmd.gripper) robot.setGripper(cmd.gripper);
-      applyJointTarget(cmd.joints, cmd.feedDegPerMin ?? 3000);
+      set({ lastMotionSpace: "Angle" });
+      startSmoothJointMove(cmd.joints, cmd.feedDegPerMin ?? state.defaultFeed, "MOVE");
     } else if (cmd.kind === "MOVE_CARTESIAN") {
       if (cmd.gripper) robot.setGripper(cmd.gripper);
+      set({ lastMotionSpace: "Cartesian" });
       const viewer = useViewerStore.getState();
       const solved = solveIKPoseCandidate(
         robot.joints,
@@ -203,30 +333,31 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         const msg = `IK failed for (${cmd.pose.x.toFixed(1)}, ${cmd.pose.y.toFixed(1)}, ${cmd.pose.z.toFixed(1)})`;
         set({ lastError: msg });
         useSerialStore.getState().appendLog({ dir: "error", text: `[RS485] ${msg}` });
-        if (state.autoReply && state.connected) void get().sendRawLine(`error:${msg}`);
+        replyIfEnabled(`error:${msg}`);
         return;
       }
-      applyJointTarget(solved.q, 3200);
+      startSmoothJointMove(solved.q, cmd.feedMmPerMin ?? state.defaultFeed, "MOVE");
     }
 
-    if (state.autoReply && state.connected) {
-      void get().sendRawLine("ok");
-    }
+    replyIfEnabled("ok");
   },
 
   advanceHardwareMotion(dtMs) {
-    const target = get().smoothTarget;
+    const state = get();
+    if (state.controllerState === "Hold") return; // Paused by @01!
+    const target = state.smoothTarget;
     if (!target) return;
 
     const nextElapsed = Math.min(target.elapsedMs + Math.max(0, dtMs), target.durationMs);
-    const u = target.durationMs > 0 ? nextElapsed / target.durationMs : 1;
-    const ease = pathTrajectorySample(u, "QUINTIC").position;
-    const q = target.startJoints.map((q0, i) => q0 + (target.targetJoints[i] - q0) * ease);
-
-    useRobotStore.getState().setJoints(q, { syncIk: true });
+    if (target.kind !== "WAIT") {
+      const u = target.durationMs > 0 ? nextElapsed / target.durationMs : 1;
+      const ease = pathTrajectorySample(u, "QUINTIC").position;
+      const q = target.startJoints.map((q0, i) => q0 + (target.targetJoints[i] - q0) * ease);
+      useRobotStore.getState().setJoints(q, { syncIk: true });
+    }
 
     if (nextElapsed >= target.durationMs) {
-      set({ smoothTarget: null });
+      set({ smoothTarget: null, controllerState: "Idle" });
     } else {
       set({ smoothTarget: { ...target, elapsedMs: nextElapsed } });
     }
@@ -255,16 +386,17 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       set({
         connected: true,
         transport: "SERIAL",
+        controllerState: "Idle",
         lastError: "",
         rxCount: 0,
         txCount: 0,
+        hmiCount: 0,
       });
       useSerialStore.getState().appendLog({
         dir: "ok",
-        text: `Connected USB/RS485 Serial @ ${get().baudRate} baud`,
+        text: `Virtual Mirobot (@${get().addressFilter}) listening on USB-RS485 @ ${get().baudRate} bps`,
       });
 
-      // Background RX line reader
       const reader = activeSerialReader;
       if (reader) {
         const decoder = new TextDecoder();
@@ -310,7 +442,15 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         activeWebSocket = ws;
 
         ws.onopen = () => {
-          set({ connected: true, transport: "WEBSOCKET", lastError: "", rxCount: 0, txCount: 0 });
+          set({
+            connected: true,
+            transport: "WEBSOCKET",
+            controllerState: "Idle",
+            lastError: "",
+            rxCount: 0,
+            txCount: 0,
+            hmiCount: 0,
+          });
           useSerialStore.getState().appendLog({
             dir: "ok",
             text: `Connected ESP32 WebSocket: ${targetUrl}`,
@@ -358,7 +498,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         await r.cancel();
         r.releaseLock();
       } catch {
-        // ignore cancel errors
+        // ignore
       }
     }
     if (activeSerialWriter) {
@@ -380,8 +520,8 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       }
     }
     if (get().connected) {
-      useSerialStore.getState().appendLog({ dir: "sys", text: "Disconnected hardware link" });
+      useSerialStore.getState().appendLog({ dir: "sys", text: "Disconnected RS-485 hardware link" });
     }
-    set({ connected: false, transport: "NONE", smoothTarget: null });
+    set({ connected: false, transport: "NONE", smoothTarget: null, controllerState: "Idle" });
   },
 }));

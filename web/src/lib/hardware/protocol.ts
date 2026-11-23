@@ -7,12 +7,22 @@ import {
 import { checkWorkspaceXYZ, fkPose6DFromJointsDeg } from "@/lib/kinematics/fk";
 import type { GripperState } from "@/lib/program/types";
 
+export type VirtualControllerState = "Idle" | "Run" | "Home" | "Hold" | "Alarm";
+
 export type HardwareCommand =
   | { kind: "MOVE_JOINT"; joints: number[]; feedDegPerMin?: number; gripper?: GripperState; raw: string }
   | { kind: "MOVE_CARTESIAN"; pose: Pose6D; feedMmPerMin?: number; gripper?: GripperState; raw: string }
-  | { kind: "GRIPPER"; state: GripperState; pwm: number; raw: string }
-  | { kind: "HOME"; raw: string }
-  | { kind: "STATUS_QUERY"; raw: string }
+  | { kind: "GRIPPER"; state: GripperState; pwm: number; label: string; raw: string }
+  | { kind: "WAIT"; durationMs: number; raw: string }
+  | { kind: "HOME"; axis?: number; raw: string }
+  | { kind: "PAUSE"; raw: string }
+  | { kind: "RESUME"; raw: string }
+  | { kind: "RESET"; raw: string }
+  | { kind: "SET_SPEED"; feed: number; raw: string }
+  | { kind: "RUN_FILE"; fileName: string; raw: string }
+  | { kind: "STATUS_QUERY"; format: "GRBL" | "O103"; raw: string }
+  | { kind: "ACK_ONLY"; note: string; raw: string }
+  | { kind: "HMI_BUS"; raw: string }
   | { kind: "IGNORED"; reason: string; raw: string }
   | { kind: "ERROR"; message: string; raw: string };
 
@@ -33,43 +43,63 @@ function validateJoints(values: number[]): string | null {
 }
 
 /**
- * Formats a WLKATA Mirobot compatible real-time status response string for `?` queries over RS485/Serial.
+ * Formats a WLKATA Mirobot compatible real-time status response string for `?` queries over RS-485.
+ * Matches both real WLKATA firmware and 0vec-skill's mirobot-rs485-emulator.py.
  */
 export function formatWlkataStatusReport(params: {
-  state: "Idle" | "Run";
+  state: VirtualControllerState;
   joints: readonly number[];
   eePose: Pose6D;
-  gripperPwm: number;
+  pumpPwm: number;
+  valvePwm?: number;
+  motionMode?: "Angle" | "Cartesian";
 }): string {
   const j = params.joints.map((v) => v.toFixed(2));
   const p = params.eePose;
-  // Real WLKATA reports Angle(ABCDXYZ) where A=J4, B=J5, C=J6, D=Rail(0), X=J1, Y=J2, Z=J3
-  return `<${params.state},Angle(ABCDXYZ):${j[3]},${j[4]},${j[5]},0.00,${j[0]},${j[1]},${j[2]},Cartesian coordinate(XYZ RxRyRz):${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)},${p.rx.toFixed(2)},${p.ry.toFixed(2)},${p.rz.toFixed(2)},Pump PWM:${params.gripperPwm},Valve PWM:0,Motion_MODE:0>`;
+  const valve = params.valvePwm ?? 0;
+  const modeNum = params.motionMode === "Cartesian" ? 0 : 1;
+  return `<${params.state},Angle(ABCDXYZ):${j[3]},${j[4]},${j[5]},0.00,${j[0]},${j[1]},${j[2]},Cartesian coordinate(XYZ RxRyRz):${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)},${p.rx.toFixed(2)},${p.ry.toFixed(2)},${p.rz.toFixed(2)},Pump PWM:${params.pumpPwm},Valve PWM:${valve},Motion_MODE:${modeNum}>`;
 }
 
 /**
- * Parses a single incoming line from ESP32 / RS485 / WebSocket.
- * Supports:
- * 1. Optional RS485 address prefix: `@01 ...` (filtered by addressFilter if set)
- * 2. WLKATA Status Query: `?`
- * 3. JSON: `{"j":[...],"grip":1}` | `{"xyz":[...],"grip":0}` | `{"cmd":"home"}`
- * 4. CSV: `J,10,20,-15,0,-10,0` | `XYZ,200,30,210,0,0,0`
- * 5. WLKATA G-code: `M21 ...`, `M20 ...`, `M3 S1000`, `M5`, `$H`, `G28`
+ * Formats the reply for RS485_Mirobot::getStatus() (`@01O103`).
+ * Matches Mirobot.cpp lines 314 & 350-365 (`State:Idle`, `State:Homing`, `State:Run`, `State:Busy`).
+ */
+export function formatO103StatusReply(state: VirtualControllerState): string {
+  if (state === "Home") return "State:Homing";
+  if (state === "Hold") return "State:Busy";
+  return `State:${state}`;
+}
+
+/**
+ * Parses a single incoming RS-485 / Serial / WebSocket line from IDX-485, ESP32, or HMI-485.
+ * 100% compatible with:
+ * - Official OVEC / 0vec-skill IDX-485 (`mirobot-rs485-control.ino`, `RS485_Mirobot` library)
+ * - Shared bus coexistence with HMI-485 (`@99...` sniffed silently without replying)
+ * - WLKATA RS-485 G-code with or without space after `@01` (`@01$H`, `@01?`, `@01O103`, `@01!`, `@01~`, `@01%`, `@01M21...`, `@01M20...`, `@01M3...`, `@01M4...`, `@01G04 P...`, `@010111=...`)
+ * - Easy JSON & CSV telemetry frames
  */
 export function parseIncomingHardwareLine(
   rawLine: string,
   options: {
     currentJoints: readonly number[];
-    addressFilter?: string; // "" or "ANY" means accept all; e.g. "01" matches @01
+    defaultMotionMode?: "Angle" | "Cartesian";
+    defaultFeed?: number;
+    addressFilter?: string; // "01" (default for IDX-485) or "ANY"
   }
 ): HardwareCommand {
   const raw = String(rawLine ?? "").trim();
   if (!raw) return { kind: "IGNORED", reason: "Empty line", raw };
 
-  let line = raw;
-  const filter = (options.addressFilter ?? "").trim().toUpperCase();
+  // 0. HMI-485 traffic (@99...) on shared RS-485 bus: monitor only, NEVER reply!
+  if (raw.startsWith("@99")) {
+    return { kind: "HMI_BUS", raw };
+  }
 
-  // Check optional RS485 slave address prefix: @01 <payload>
+  let line = raw;
+  const filter = (options.addressFilter ?? "01").trim().toUpperCase();
+
+  // Check optional RS-485 address prefix `@01` (with OR without space after @01!)
   const addrMatch = line.match(/^@(\d{1,2})\s*(.*)$/);
   if (addrMatch) {
     const addr = addrMatch[1].padStart(2, "0");
@@ -77,12 +107,46 @@ export function parseIncomingHardwareLine(
       return { kind: "IGNORED", reason: `Addressed to @${addr} (filter @${filter})`, raw };
     }
     line = addrMatch[2].trim();
-    if (!line) return { kind: "IGNORED", reason: "Empty RS485 payload", raw };
+    if (!line) return { kind: "IGNORED", reason: "Empty RS-485 payload", raw };
   }
 
-  // Real-time status query `?`
-  if (line === "?") {
-    return { kind: "STATUS_QUERY", raw };
+  // Real-time single-char / short control commands (from Mirobot.cpp & mirobot-rs485-control.ino)
+  if (line === "?" || line.endsWith("?")) {
+    return { kind: "STATUS_QUERY", format: "GRBL", raw };
+  }
+  if (/^O103$/i.test(line)) {
+    return { kind: "STATUS_QUERY", format: "O103", raw };
+  }
+  if (line === "!") return { kind: "PAUSE", raw };
+  if (line === "~") return { kind: "RESUME", raw };
+  if (line === "%") return { kind: "RESET", raw };
+
+  // Homing: $H, $H1..$H7
+  const homeMatch = line.match(/^\$H(\d)?\b/i);
+  if (homeMatch) {
+    return {
+      kind: "HOME",
+      axis: homeMatch[1] ? Number(homeMatch[1]) : undefined,
+      raw,
+    };
+  }
+
+  // Controller config commands ($49=height, $45=0/1, etc. from Mirobot.cpp)
+  if (/^\$\d+=/.test(line)) {
+    return { kind: "ACK_ONLY", note: `Config ${line}`, raw };
+  }
+
+  // Run saved G-code file: 0111=vec2501, o111=data25, or o111vec2501 (Mirobot.cpp line 403)
+  const runFileMatch = line.match(/^(?:0111|o111)=?(.+)$/i);
+  if (runFileMatch) {
+    const fileName = runFileMatch[1].trim();
+    return { kind: "RUN_FILE", fileName, raw };
+  }
+
+  // Standalone feed speed command: F2000 (from Mirobot.cpp setMoveSpeed & homing)
+  const speedOnlyMatch = line.match(/^F\s*(\d+(?:\.\d+)?)$/i);
+  if (speedOnlyMatch) {
+    return { kind: "SET_SPEED", feed: Number(speedOnlyMatch[1]), raw };
   }
 
   // 1. JSON payload
@@ -138,6 +202,7 @@ export function parseIncomingHardwareLine(
           kind: "GRIPPER",
           state: gripper,
           pwm: gripper === "CLOSE" ? 1000 : 0,
+          label: `Gripper ${gripper}`,
           raw,
         };
       }
@@ -179,7 +244,6 @@ export function parseIncomingHardwareLine(
   // 3. WLKATA G-code command
   const code = line.replace(/\([^)]*\)/g, " ").split(";", 1)[0].trim().toUpperCase();
   if (!code) return { kind: "IGNORED", reason: "Comment", raw };
-  if (code === "$H" || code.startsWith("$H ")) return { kind: "HOME", raw };
 
   const words: Array<{ letter: string; value: number }> = [];
   WORD_PATTERN.lastIndex = 0;
@@ -188,23 +252,59 @@ export function parseIncomingHardwareLine(
     const val = Number(m[2]);
     if (Number.isFinite(val)) words.push({ letter: m[1].toUpperCase(), value: val });
   }
-  if (!words.length) return { kind: "IGNORED", reason: "Non-command text", raw };
+  if (!words.length) return { kind: "IGNORED", reason: "Non-command bus traffic", raw };
 
   const mCodes = words.filter((w) => w.letter === "M").map((w) => w.value);
   const gCodes = words.filter((w) => w.letter === "G").map((w) => w.value);
 
   if (gCodes.includes(28)) return { kind: "HOME", raw };
 
+  // G04 / G4 Dwell
+  if (gCodes.includes(4)) {
+    const sec = words.find((w) => w.letter === "P")?.value ?? words.find((w) => w.letter === "S")?.value ?? 0.5;
+    return { kind: "WAIT", durationMs: Math.max(0, Math.round(sec * 1000)), raw };
+  }
+
+  // M3 (Pump S1000=ON, S500=BLOW, S0=OFF; or Mirobot.cpp Servo Gripper S40=GRAB, S60=OPEN)
   if (mCodes.includes(3)) {
     const pwm = Math.max(0, Math.min(1000, Math.round(words.find((w) => w.letter === "S")?.value ?? 1000)));
-    return { kind: "GRIPPER", state: pwm > 0 ? "CLOSE" : "OPEN", pwm, raw };
+    let state: GripperState = "OPEN";
+    let label = `Pump OFF (M3 S${pwm})`;
+    if (pwm >= 700) {
+      state = "CLOSE";
+      label = `Suction ON / Grab (M3 S${pwm})`;
+    } else if (pwm >= 400) {
+      state = "OPEN";
+      label = `Air Blow / Release (M3 S${pwm})`;
+    } else if (pwm >= 1 && pwm <= 50) {
+      state = "CLOSE";
+      label = `Servo Gripper GRAB (M3 S${pwm})`;
+    } else if (pwm > 50) {
+      state = "OPEN";
+      label = `Servo Gripper OPEN (M3 S${pwm})`;
+    }
+    return { kind: "GRIPPER", state, pwm, label, raw };
   }
+
+  // M4 E65 (Gripper Grab) / M4 E40 (Gripper Open) per lab-03 & mirobot-rs485-emulator.py
+  if (mCodes.includes(4)) {
+    const eVal = Math.max(0, Math.min(100, Math.round(words.find((w) => w.letter === "E")?.value ?? 65)));
+    const state: GripperState = eVal >= 55 ? "CLOSE" : "OPEN";
+    return {
+      kind: "GRIPPER",
+      state,
+      pwm: eVal,
+      label: state === "CLOSE" ? `Gripper GRAB (M4 E${eVal})` : `Gripper OPEN (M4 E${eVal})`,
+      raw,
+    };
+  }
+
   if (mCodes.includes(5)) {
-    return { kind: "GRIPPER", state: "OPEN", pwm: 0, raw };
+    return { kind: "GRIPPER", state: "OPEN", pwm: 0, label: "Gripper/Pump OFF (M5)", raw };
   }
 
   const isRelative = gCodes.includes(91);
-  const feed = words.find((w) => w.letter === "F")?.value;
+  const feed = words.find((w) => w.letter === "F")?.value ?? options.defaultFeed;
   const axes: Partial<Record<"x" | "y" | "z" | "a" | "b" | "c", number>> = {};
   words.forEach(({ letter, value }) => {
     if ("XYZABC".includes(letter)) {
@@ -213,10 +313,17 @@ export function parseIncomingHardwareLine(
   });
 
   if (!Object.keys(axes).length) {
+    // Conveyor / Rail D-axis move or modal command without XYZABC
+    if (words.some((w) => w.letter === "D")) {
+      return { kind: "ACK_ONLY", note: `External axis ${code}`, raw };
+    }
     return { kind: "IGNORED", reason: "No axis coordinates", raw };
   }
 
-  if (mCodes.includes(20)) {
+  const useCartesian =
+    mCodes.includes(20) || (!mCodes.includes(21) && options.defaultMotionMode === "Cartesian");
+
+  if (useCartesian) {
     const currPose = fkPose6DFromJointsDeg(options.currentJoints);
     const nextPose: Pose6D = { ...currPose };
     const map: Record<keyof typeof axes, keyof Pose6D> = {
@@ -237,12 +344,12 @@ export function parseIncomingHardwareLine(
     return {
       kind: "MOVE_CARTESIAN",
       pose: nextPose,
-      feedMmPerMin: feed && feed > 0 ? feed : 4800,
+      feedMmPerMin: feed && feed > 0 ? feed : 2000,
       raw,
     };
   }
 
-  // Default or M21 = Joint Move
+  // M21 Joint Move
   const nextJoints = (options.currentJoints.length === 6 ? options.currentJoints : HOME_JOINTS).slice();
   const jMap: Record<keyof typeof axes, number> = { x: 0, y: 1, z: 2, a: 3, b: 4, c: 5 };
   (Object.keys(axes) as Array<keyof typeof axes>).forEach((ax) => {
@@ -256,101 +363,93 @@ export function parseIncomingHardwareLine(
   return {
     kind: "MOVE_JOINT",
     joints: nextJoints,
-    feedDegPerMin: feed && feed > 0 ? feed : 2700,
+    feedDegPerMin: feed && feed > 0 ? feed : 2000,
     raw,
   };
 }
 
 export const ESP32_RS485_ARDUINO_SKETCH = `/*
- * ESP32 + RS485 Controller for Virtual Mi Robot Simulator
- * -------------------------------------------------------
- * Hardware Wiring:
- *   ESP32 GPIO17 (TX2) --> RS485 Module DI / TXD
- *   ESP32 GPIO16 (RX2) --> RS485 Module RO / RXD
- *   ESP32 GPIO4        --> RS485 Module DE + RE (skip if using XY-485 auto-direction)
- *   RS485 A            --> USB-RS485 A (D+)
- *   RS485 B            --> USB-RS485 B (D-)
- *   GND                --> USB-RS485 GND
+ * IDX-485 (ESP32-C5) <-> Virtual Mi Robot Simulator via USB-RS485
+ * ---------------------------------------------------------------
+ * Compatible with 0vec-skill Lab 03 / Lab 05 & official <Mirobot.h> library!
  *
- * Web Simulator Settings:
- *   Open "RS485 / ESP32" -> USB / RS485 Serial -> Baud: 115200 -> RS485 Addr: 01 -> Connect
+ * IDX-485 Onboard RS-485 Pins (Auto-Direction):
+ *   GPIO 4 = RX485 (Serial2 RX)
+ *   GPIO 5 = TX485 (Serial2 TX)
+ *   Baud   = 115200 bps (8N1)
+ *
+ * Wiring:
+ *   IDX-485 +A     --> USB-RS485 A (D+)   [also parallel to HMI-485 +A if used]
+ *   IDX-485 -B     --> USB-RS485 B (D-)   [also parallel to HMI-485 -B if used]
+ *   IDX-485 S.GND  --> USB-RS485 GND
+ *
+ * (If using generic ESP32 + MAX485: RX=16, TX=17, DE/RE=4)
  */
 
 #include <Arduino.h>
 
-#define RS485_RX_PIN   16
-#define RS485_TX_PIN   17
-#define RS485_DE_PIN   4     // Set to -1 if using XY-485 / auto-direction module
-#define RS485_BAUD     115200
-#define ROBOT_ADDR     "01"
+#define PIN_RS485_RX  4       // IDX-485: GPIO4 (Generic ESP32: GPIO16)
+#define PIN_RS485_TX  5       // IDX-485: GPIO5 (Generic ESP32: GPIO17)
+#define RS485_BAUD    115200
+#define ARM_ADDR      "@01"
 
-HardwareSerial RS485(2);
-
-void rs485SendLine(const String &cmd) {
-  if (RS485_DE_PIN >= 0) {
-    digitalWrite(RS485_DE_PIN, HIGH); // Transmit mode
-    delayMicroseconds(100);
-  }
-  RS485.print(cmd);
-  RS485.print("\\r\\n");
-  RS485.flush();
-  if (RS485_DE_PIN >= 0) {
-    delayMicroseconds(100);
-    digitalWrite(RS485_DE_PIN, LOW);  // Back to Receive mode
-  }
-  Serial.println("[TX RS485] " + cmd);
+void sendArm(const String &cmd) {
+  Serial2.print(String(ARM_ADDR) + cmd + "\\r\\n");
+  Serial2.flush();
+  Serial.println("[TX -> Virtual Arm] " + String(ARM_ADDR) + cmd);
 }
 
-void readRs485Reply(unsigned long waitMs = 300) {
-  unsigned long start = millis();
-  while (millis() - start < waitMs) {
-    if (RS485.available()) {
-      String reply = RS485.readStringUntil('\\n');
-      reply.trim();
-      if (reply.length() > 0) {
-        Serial.println("[RX Robot] " + reply);
+bool waitArmIdle(unsigned long timeoutMs = 15000) {
+  unsigned long t0 = millis();
+  delay(150);
+  while (millis() - t0 < timeoutMs) {
+    Serial2.print("@01?\\r\\n");
+    unsigned long waitStart = millis();
+    String resp = "";
+    while (millis() - waitStart < 250) {
+      if (Serial2.available()) {
+        resp = Serial2.readStringUntil('\\n');
+        resp.trim();
+        if (resp.length() > 0) break;
       }
     }
+    if (resp.indexOf("Idle") >= 0) return true;
+    delay(150);
   }
+  return false;
 }
 
 void setup() {
   Serial.begin(115200);
-  if (RS485_DE_PIN >= 0) {
-    pinMode(RS485_DE_PIN, OUTPUT);
-    digitalWrite(RS485_DE_PIN, LOW);
-  }
-  RS485.begin(RS485_BAUD, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
-  delay(1000);
-  Serial.println("ESP32 RS485 Virtual Mirobot Controller Ready!");
+  Serial2.begin(RS485_BAUD, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
+  delay(800);
+  sendArm("$H");
+  waitArmIdle();
 }
 
 void loop() {
-  // 1. Go Home (WLKATA RS485 addressed G-code)
-  rs485SendLine(String("@") + ROBOT_ADDR + " M21 G90 X0 Y0 Z0 A0 B0 C0 F3000");
-  readRs485Reply(1800);
+  // Pick & Place sequence matching OVEC Lab 03
+  sendArm("M21 G90 G00 X35 Y15 Z-10 A0 B-5 C0 F2000");
+  waitArmIdle();
 
-  // 2. Open Gripper
-  rs485SendLine(String("@") + ROBOT_ADDR + " M5");
-  readRs485Reply(400);
+  sendArm("M21 G90 G00 X35 Y28 Z-15 A0 B-13 C0 F2000");
+  waitArmIdle();
 
-  // 3. Move to Pick pose
-  rs485SendLine(String("@") + ROBOT_ADDR + " M21 G90 X-35 Y22 Z-28 A0 B-15 C0 F3000");
-  readRs485Reply(1800);
+  sendArm("M3 S1000"); // Suction ON / Grab
+  delay(400);
 
-  // 4. Close Gripper
-  rs485SendLine(String("@") + ROBOT_ADDR + " M3 S1000");
-  readRs485Reply(600);
+  sendArm("M21 G90 G00 X-35 Y15 Z-10 A0 B-5 C0 F2000");
+  waitArmIdle();
 
-  // 5. Move to Place pose (JSON format also works!)
-  rs485SendLine("@01 {\\"j\\":[45, 26, -32, 0, -12, -20], \\"grip\\":1}");
-  readRs485Reply(2200);
+  sendArm("M21 G90 G00 X-35 Y28 Z-15 A0 B-13 C0 F2000");
+  waitArmIdle();
 
-  // 6. Release & Query Virtual Robot Status
-  rs485SendLine(String("@") + ROBOT_ADDR + " M5");
-  readRs485Reply(500);
+  sendArm("M3 S500");  // Air Blow Release
+  delay(350);
+  sendArm("M3 S0");    // Pump OFF
 
-  rs485SendLine(String("@") + ROBOT_ADDR + " ?");
-  readRs485Reply(600);
+  sendArm("M21 G90 G00 X0 Y0 Z0 A0 B0 C0 F2000");
+  waitArmIdle();
+  delay(1000);
 }
 `;
