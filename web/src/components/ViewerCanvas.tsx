@@ -50,6 +50,8 @@ export function ViewerCanvas() {
   const viewer = useViewerStore();
   const eePose = useRobotStore((s) => s.eePose);
   const workspaceStatus = useRobotStore((s) => s.workspaceStatus);
+  const gripperState = useRobotStore((s) => s.gripperState);
+  const setGripper = useRobotStore((s) => s.setGripper);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -378,14 +380,17 @@ export function ViewerCanvas() {
         </div>
       </div>
 
-      {/* Bottom-Left: Subtle Live TCP Coordinate HUD */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-col gap-1.5">
+      {/* Bottom-Left: Subtle Live TCP Coordinate + Clickable Gripper HUD */}
+      <div
+        className="absolute bottom-3 left-3 z-10 flex flex-col items-start gap-1.5"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         {workspaceStatus.out && (
           <div className="rounded-lg border border-rose-500/50 bg-rose-950/85 px-2.5 py-1 text-[11px] font-medium text-rose-200 shadow-md backdrop-blur-sm">
             {workspaceStatus.message}
           </div>
         )}
-        <div className="inline-flex items-center gap-3 rounded-xl border border-slate-200/70 bg-white/85 px-3 py-1.5 font-mono text-[11px] text-slate-700 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200">
+        <div className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200/70 bg-white/85 px-3 py-1.5 font-mono text-[11px] text-slate-700 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200">
           <span className="font-sans text-[10px] font-bold tracking-wider text-sky-600 uppercase dark:text-sky-400">
             TCP
           </span>
@@ -399,9 +404,23 @@ export function ViewerCanvas() {
             <strong className="text-sky-500">Z</strong> {eePose.z.toFixed(1)} mm
           </span>
           <span className="hidden text-slate-400 sm:inline">|</span>
-          <span className="hidden text-slate-500 sm:inline dark:text-slate-400">
-            R {eePose.rx.toFixed(0)}° / {eePose.ry.toFixed(0)}° / {eePose.rz.toFixed(0)}°
-          </span>
+          <button
+            type="button"
+            onClick={() => setGripper(gripperState === "OPEN" ? "CLOSE" : "OPEN")}
+            title="Click to toggle 3D Gripper (M3/M5)"
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[10px] font-bold transition ${
+              gripperState === "CLOSE"
+                ? "bg-amber-500/20 text-amber-600 hover:bg-amber-500/30 dark:text-amber-400"
+                : "bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30 dark:text-emerald-400"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                gripperState === "CLOSE" ? "bg-amber-500" : "bg-emerald-500"
+              }`}
+            />
+            Grip: {gripperState}
+          </button>
         </div>
       </div>
 

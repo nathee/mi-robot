@@ -1,13 +1,16 @@
 import {
   AmbientLight,
   Box3,
+  BoxGeometry,
   Color,
+  CylinderGeometry,
   DirectionalLight,
   Euler,
   Group,
   HemisphereLight,
   MathUtils,
   Mesh,
+  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -20,6 +23,7 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LINK_NAMES } from "@/lib/kinematics/constants";
 import { finiteOr, forwardTxRxTzRz } from "@/lib/kinematics/fk";
+import { useCodeStore } from "@/stores/useCodeStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useThemeStore } from "@/stores/useThemeStore";
@@ -72,6 +76,11 @@ export class MirobotSceneEngine {
   private worldFrame: Group | null = null;
   private tcpFrame: Group | null = null;
   private tcpCoordLabel: Sprite | null = null;
+  private gripperGroup: Group | null = null;
+  private gripperFingerL: Mesh | null = null;
+  private gripperFingerR: Mesh | null = null;
+  private gripperStatusMat: MeshStandardMaterial | null = null;
+  private gripperCurrentGap = 0.014;
   private gridSet: GridBuildOutput | null = null;
   private workspaceGroup: Group | null = null;
   private pathGroup: Group;
@@ -146,6 +155,7 @@ export class MirobotSceneEngine {
     loadMirobotSTLs(this.robotGroup).then(({ links }) => {
       if (this.disposed) return;
       this.linkMeshes = links;
+      this.attachGripperVisual();
       this.applyCurrentLinkTransforms();
       this.rebuildFramesAndLabels();
       this.rebuildPathVisuals();
@@ -230,6 +240,55 @@ export class MirobotSceneEngine {
         }
       })
     );
+  }
+
+  private attachGripperVisual(): void {
+    const link6 = this.linkMeshes.get("link6");
+    if (!link6) return;
+    if (this.gripperGroup) {
+      this.gripperGroup.parent?.remove(this.gripperGroup);
+      disposeObjectTree(this.gripperGroup);
+    }
+
+    const grp = new Group();
+    grp.name = "mirobotGripper";
+
+    const bodyMat = new MeshStandardMaterial({ color: 0x334155, metalness: 0.45, roughness: 0.45 });
+    const fingerMat = new MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.55, roughness: 0.35 });
+    const statusMat = new MeshStandardMaterial({
+      color: 0x10b981,
+      emissive: 0x10b981,
+      emissiveIntensity: 0.55,
+      roughness: 0.3,
+    });
+
+    // Mounting flange & housing along -Z of link6 TCP
+    const flange = new Mesh(new CylinderGeometry(0.014, 0.014, 0.008, 16), bodyMat);
+    flange.rotation.x = Math.PI / 2;
+    flange.position.z = 0.004;
+    grp.add(flange);
+
+    const statusRing = new Mesh(new CylinderGeometry(0.0155, 0.0155, 0.003, 16), statusMat);
+    statusRing.rotation.x = Math.PI / 2;
+    statusRing.position.z = 0.009;
+    grp.add(statusRing);
+
+    const rail = new Mesh(new BoxGeometry(0.036, 0.012, 0.01), bodyMat);
+    rail.position.z = 0.015;
+    grp.add(rail);
+
+    const fingerGeo = new BoxGeometry(0.005, 0.008, 0.024);
+    const fingerL = new Mesh(fingerGeo, fingerMat);
+    fingerL.position.set(-0.014, 0, 0.031);
+    const fingerR = new Mesh(fingerGeo, fingerMat);
+    fingerR.position.set(0.014, 0, 0.031);
+    grp.add(fingerL, fingerR);
+
+    link6.add(grp);
+    this.gripperGroup = grp;
+    this.gripperFingerL = fingerL;
+    this.gripperFingerR = fingerR;
+    this.gripperStatusMat = statusMat;
   }
 
   private isDark(): boolean {
@@ -544,6 +603,23 @@ export class MirobotSceneEngine {
     // Advance trajectory playback if PLAYING
     if (usePathStore.getState().status === "PLAYING") {
       usePathStore.getState().advancePlaybackFrame(dtMs);
+    }
+
+    // Advance Code Editor / Blocks / Script execution if RUNNING
+    if (useCodeStore.getState().status === "RUNNING") {
+      useCodeStore.getState().advanceCodeFrame(dtMs);
+    }
+
+    // Animate 3D gripper fingers smoothly toward target OPEN/CLOSE gap
+    if (this.gripperFingerL && this.gripperFingerR && this.gripperStatusMat) {
+      const isClosed = useRobotStore.getState().gripperState === "CLOSE";
+      const targetGap = isClosed ? 0.004 : 0.014;
+      this.gripperCurrentGap += (targetGap - this.gripperCurrentGap) * Math.min(1, dtMs * 0.018);
+      this.gripperFingerL.position.x = -this.gripperCurrentGap;
+      this.gripperFingerR.position.x = this.gripperCurrentGap;
+      const hex = isClosed ? 0xf59e0b : 0x10b981;
+      this.gripperStatusMat.color.setHex(hex);
+      this.gripperStatusMat.emissive.setHex(hex);
     }
 
     this.controls.update();

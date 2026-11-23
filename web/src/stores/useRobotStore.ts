@@ -4,6 +4,7 @@ import {
   type IkBranchMode,
   type Pose6D,
 } from "@/lib/kinematics/constants";
+import type { GripperState } from "@/lib/program/types";
 import {
   checkWorkspaceXYZ,
   clampJointsToLimits,
@@ -34,11 +35,14 @@ interface RobotState {
   lastValidIkPose: Pose6D;
   lastIkErr: IkErrorState;
   workspaceStatus: WorkspaceStatusState;
+  gripperState: GripperState;
+  gripperPwm: number;
 
   setJoint: (index: number, deg: number, options?: { log?: boolean }) => void;
   stepJoint: (index: number, deltaDeg: number) => void;
   setJoints: (joints: readonly number[], options?: { syncIk?: boolean }) => void;
   setHome: () => void;
+  setGripper: (state: GripperState, pwm?: number) => void;
   syncIkTargetFromJoints: (joints?: readonly number[]) => void;
   setIkTarget: (partial: Partial<Pose6D>) => boolean;
   rollbackIkTarget: () => void;
@@ -75,6 +79,8 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   lastValidIkPose: { ...initialHomePose },
   lastIkErr: { posMm: 0, rotDeg: 0, solver: "-" },
   workspaceStatus: { out: false, message: "" },
+  gripperState: "OPEN",
+  gripperPwm: 0,
 
   setJoint(index, deg, options = {}) {
     const prev = get().joints[index];
@@ -133,6 +139,18 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     useSerialStore.getState().appendLog({
       dir: "sys",
       text: "Set Home configuration (q=[0,0,0,0,0,0])",
+    });
+  },
+
+  setGripper(state, pwm) {
+    const resolvedPwm = state === "CLOSE" ? Math.max(1, Math.min(1000, pwm ?? 1000)) : 0;
+    set({ gripperState: state, gripperPwm: resolvedPwm });
+    useSerialStore.getState().appendLog({
+      dir: "sys",
+      text:
+        state === "CLOSE"
+          ? `Gripper CLOSED (M3 S${resolvedPwm})`
+          : "Gripper OPENED (M5)",
     });
   },
 

@@ -8,7 +8,7 @@ import {
 } from "@/lib/kinematics/constants";
 
 export type PoseMode = "JOINT" | "IK";
-export type SidebarPanel = "JOG" | "PATH";
+export type SidebarPanel = "JOG" | "PATH" | "CODE";
 export type TcpTransformMode = "translate" | "rotate";
 
 export interface FrameAxesVisibility {
