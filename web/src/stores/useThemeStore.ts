@@ -25,7 +25,8 @@ function applyDomTheme(isDark: boolean): void {
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   mode: "auto",
-  isDark: true,
+  // Start from what the boot script in app/layout.tsx already applied, so the 3D scene doesn't build dark first.
+  isDark: typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true,
 
   init() {
     let saved: ThemeMode = "auto";

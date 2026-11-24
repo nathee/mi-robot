@@ -17,6 +17,7 @@ import {
   createDemoBlocks,
   nextBlockId,
 } from "@/lib/program/blocks";
+import { pathTargetsToBlocks } from "@/lib/program/pathToBlocks";
 import {
   compileGcodeProgram,
   SAMPLE_GCODE_PROGRAMS,
@@ -85,6 +86,8 @@ interface CodeState {
   convertBlocksToScript: () => boolean;
   convertScriptToGcode: () => boolean;
   getExportableGcode: () => string;
+  /** Replaces Blocks, Script and G-code with a program generated from Path waypoints. */
+  generateFromPath: () => boolean;
 
   // Execution
   compileCurrent: () => boolean;
@@ -378,6 +381,46 @@ export const useCodeStore = create<CodeState>((set, get) => ({
     if (mode === "BLOCKS") return blocksToGcode(blocks, projectName, tool);
     const res = compileScriptProgram(scriptText);
     return res.errors.length ? "" : stepsToGcode(res.steps, projectName, tool);
+  },
+
+  generateFromPath() {
+    const path = usePathStore.getState();
+    if (path.targets.length === 0) {
+      logCode("Generate from Path: no waypoints to convert", "error");
+      return false;
+    }
+    if (get().status === "RUNNING" || get().status === "PAUSED") get().stop("Program replaced from Path");
+
+    const { blocks, warnings } = pathTargetsToBlocks({
+      targets: path.targets,
+      settings: path.settings,
+      repeatCount: path.repeatCount,
+    });
+    const projectName = useProjectStore.getState().name;
+    const tool = useRobotStore.getState().toolType;
+    const res = compileBlocksProgram(blocks);
+    const scriptText = `# Generated from Path (${path.targets.length} waypoints)\n${blocksToScript(blocks)}\n`;
+    const gcodeText = res.errors.length ? "" : blocksToGcode(blocks, projectName, tool);
+
+    set({
+      blocks,
+      scriptText,
+      gcodeText,
+      mode: "BLOCKS",
+      errors: res.errors,
+      compiledSteps: [],
+      activeStepIndex: -1,
+      activeLine: null,
+      activeBlockId: null,
+    });
+    useProjectStore.getState().setDirty(true);
+    warnings.forEach((w) => logCode(w));
+    if (res.errors.length) {
+      logCode(`Generated Blocks from Path with ${res.errors.length} error(s); G-code not generated`, "error");
+      return false;
+    }
+    logCode(`Generated Blocks, Script and G-code from ${path.targets.length} Path waypoints`, "ok");
+    return true;
   },
 
   compileCurrent() {

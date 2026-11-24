@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardPaste,
+  Code2,
   Copy,
   GripVertical,
   Navigation,
@@ -27,7 +28,9 @@ import {
   pathTrajectoryEquation,
   TRAJECTORY_PROFILES,
 } from "@/lib/path/trajectory";
+import { useCodeStore } from "@/stores/useCodeStore";
 import { usePathStore } from "@/stores/usePathStore";
+import { useViewerStore } from "@/stores/useViewerStore";
 import { NumericInput } from "./ui";
 
 interface PathPanelProps {
@@ -78,6 +81,8 @@ export function PathPanel({
   const resetPlayback = usePathStore((s) => s.resetPlayback);
   const stepProgram = usePathStore((s) => s.stepProgram);
   const loadDemoPath = usePathStore((s) => s.loadDemoPath);
+  const generateFromPath = useCodeStore((s) => s.generateFromPath);
+  const setViewerField = useViewerStore((s) => s.setField);
 
   const isPlaying = status === "PLAYING";
   const isLocked = status === "PLAYING" || status === "PAUSED";
@@ -233,6 +238,21 @@ export function PathPanel({
           <span>Update</span>
         </button>
       </div>
+
+      {/* Generate Code */}
+      <button
+        type="button"
+        disabled={isLocked || targets.length === 0}
+        onClick={() => {
+          generateFromPath();
+          setViewerField("sidebarPanel", "CODE");
+        }}
+        title="Replace the Code program with Blocks, Script and G-code generated from these waypoints"
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
+      >
+        <Code2 className="h-3.5 w-3.5" />
+        <span>Generate Code from Path</span>
+      </button>
 
       {/* Waypoints Section */}
       <div className="space-y-2">
