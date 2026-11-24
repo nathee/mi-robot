@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { APP_NAME } from "@/lib/appConfig";
 
 export const metadata: Metadata = {
-  title: "Mi Robot Simulator",
+  title: APP_NAME,
   description:
     "WLKATA Mirobot 6-DOF Robot Arm Web Simulator — FK/IK, 3D Gizmos, Path Planning (MoveJ/MoveL/MoveC), and G-code.",
 };

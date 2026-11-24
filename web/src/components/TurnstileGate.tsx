@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
+import { APP_NAME } from "@/lib/appConfig";
 
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
@@ -126,7 +127,7 @@ export function TurnstileGate({
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-sky-500" aria-hidden />
-        <h1 className="text-lg font-semibold">Mi Robot Simulator</h1>
+        <h1 className="text-lg font-semibold">{APP_NAME}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Confirm you are human to open the simulator.
         </p>

@@ -25,6 +25,7 @@ import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore, type ThemeMode } from "@/stores/useThemeStore";
+import { APP_NAME } from "@/lib/appConfig";
 
 interface ToolbarProps {
   onRequestRenameProject: () => void;
@@ -135,8 +136,11 @@ export function Toolbar({
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs">
             <Bot className="h-4 w-4" />
           </div>
-          <span className="text-sm font-bold tracking-wide text-slate-900 dark:text-white">
-            MIROBOT
+          <span
+            className="max-w-[16rem] truncate text-sm font-bold tracking-wide text-slate-900 dark:text-white"
+            title={APP_NAME}
+          >
+            {APP_NAME}
           </span>
           <span className="hidden rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
             6-DOF SIM
