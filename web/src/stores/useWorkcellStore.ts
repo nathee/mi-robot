@@ -192,7 +192,9 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   },
 
   clearBoxes() {
-    set({ boxes: [] });
+    const n = get().boxes.length;
+    set({ boxes: [], nextBoxNum: 1 });
+    log(`Cleared ${n} box${n === 1 ? "" : "es"}`);
   },
 
   setSensorOffset(offsetMm) {

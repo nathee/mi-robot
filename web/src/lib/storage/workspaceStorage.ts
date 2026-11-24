@@ -57,6 +57,17 @@ export function loadAutosaveFromStorage(storage?: Storage): WorkspaceSnapshotDat
   }
 }
 
+export function clearAutosaveFromStorage(storage?: Storage): boolean {
+  const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+  if (!store) return false;
+  try {
+    store.removeItem(AUTOSAVE_STORAGE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function saveAutosaveToStorage(data: WorkspaceSnapshotData, storage?: Storage): boolean {
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return false;

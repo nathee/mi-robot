@@ -17,6 +17,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Pencil,
+  RotateCcw,
   Save,
   Sun,
 } from "lucide-react";
@@ -39,6 +40,7 @@ interface ToolbarProps {
   onRequestDownloadRobot: () => void;
   onRequestOpenHistory: () => void;
   onRequestOpenHardware: () => void;
+  onRequestResetWorkspace: () => void;
 }
 
 export function triggerTextDownload(filename: string, content: string, mime = "text/plain"): void {
@@ -63,6 +65,7 @@ export function Toolbar({
   onRequestDownloadRobot,
   onRequestOpenHistory,
   onRequestOpenHardware,
+  onRequestResetWorkspace,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -339,6 +342,19 @@ export function Toolbar({
               >
                 <Download className="h-3.5 w-3.5" />
                 <span className="flex-1">Send to Robot (USB / File)</span>
+              </button>
+              <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setFileMenuOpen(false);
+                  onRequestResetWorkspace();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span className="flex-1">Reset Workspace…</span>
               </button>
             </div>
           )}

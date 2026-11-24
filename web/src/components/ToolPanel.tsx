@@ -325,6 +325,14 @@ export function ToolPanel() {
               >
                 <Plus className="h-3 w-3" /> On Tray
               </button>
+              <button
+                type="button"
+                disabled={boxes.length === 0}
+                onClick={() => wc().clearBoxes()}
+                className={`${BTN} col-span-2 text-rose-600 hover:text-rose-600 disabled:opacity-40 dark:text-rose-400`}
+              >
+                <Trash2 className="h-3 w-3" /> Clear All Boxes
+              </button>
             </div>
 
             {boxes.length > 0 ? (

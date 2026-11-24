@@ -6,6 +6,7 @@ import {
   loadAutosaveFromStorage,
   loadHistoryFromStorage,
   MAX_HISTORY_ENTRIES,
+  clearAutosaveFromStorage,
   saveAutosaveToStorage,
   saveHistoryToStorage,
   type WorkspaceHistoryEntry,
@@ -30,6 +31,8 @@ interface HistoryState {
   restoreFromHistory: (id: string) => boolean;
   deleteFromHistory: (id: string) => void;
   clearHistory: () => void;
+  /** Backs up to Work History, deletes the saved session and reloads with default workspace. */
+  resetWorkspace: () => void;
 }
 
 export const useHistoryStore = create<HistoryState>((set, get) => ({
@@ -169,5 +172,15 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     saveHistoryToStorage([]);
     set({ entries: [] });
     useSerialStore.getState().appendLog({ dir: "sys", text: "Cleared local work history" });
+  },
+
+  resetWorkspace() {
+    get().saveToHistory("Auto-backup before Reset Workspace");
+    clearAutosaveFromStorage();
+    // hydrated=false makes saveAutosave() a no-op, so a pending debounced autosave can't
+    // re-write the session before the reload; clean dirty flag skips the beforeunload prompt.
+    set({ hydrated: false });
+    useProjectStore.getState().setDirty(false);
+    if (typeof window !== "undefined") window.location.reload();
   },
 }));

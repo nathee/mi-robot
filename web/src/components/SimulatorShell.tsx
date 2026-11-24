@@ -8,6 +8,7 @@ import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
+import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { ControlSidebar } from "./ControlSidebar";
 import { HardwareModal } from "./HardwareModal";
 import { ConfirmModal, DownloadRobotModal, HistoryModal, TextPromptModal } from "./Modals";
@@ -41,6 +42,7 @@ export function SimulatorShell() {
   }>({ open: false, index: -1, name: "" });
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [confirmNewOpen, setConfirmNewOpen] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [hardwareModalOpen, setHardwareModalOpen] = useState(false);
@@ -50,6 +52,7 @@ export function SimulatorShell() {
     renameTargetState.open ||
     confirmClearOpen ||
     confirmNewOpen ||
+    confirmResetOpen ||
     downloadModalOpen ||
     historyModalOpen ||
     hardwareModalOpen;
@@ -62,6 +65,7 @@ export function SimulatorShell() {
   const restoreFromHistory = useHistoryStore((s) => s.restoreFromHistory);
   const deleteFromHistory = useHistoryStore((s) => s.deleteFromHistory);
   const clearHistory = useHistoryStore((s) => s.clearHistory);
+  const resetWorkspace = useHistoryStore((s) => s.resetWorkspace);
   const targets = usePathStore((s) => s.targets);
   const exportGcodeString = usePathStore((s) => s.exportGcodeString);
   const getCodeGcode = useCodeStore((s) => s.getExportableGcode);
@@ -103,6 +107,7 @@ export function SimulatorShell() {
       usePathStore.subscribe(scheduleAutosave),
       useCodeStore.subscribe(scheduleAutosave),
       useRobotStore.subscribe(scheduleAutosave),
+      useWorkcellStore.subscribe(scheduleAutosave),
     ];
 
     return () => {
@@ -272,6 +277,7 @@ export function SimulatorShell() {
         onRequestDownloadRobot={() => setDownloadModalOpen(true)}
         onRequestOpenHistory={() => setHistoryModalOpen(true)}
         onRequestOpenHardware={() => setHardwareModalOpen(true)}
+        onRequestResetWorkspace={() => setConfirmResetOpen(true)}
       />
 
       {/* Main Workspace: 3D Viewport + Control Sidebar + Collapsible Console */}
@@ -397,6 +403,16 @@ export function SimulatorShell() {
           newProgram();
         }}
         onClose={() => setConfirmNewOpen(false)}
+      />
+
+      <ConfirmModal
+        open={confirmResetOpen}
+        title="Reset Workspace?"
+        message="Clears the saved session (waypoints, code, boxes and layout) and reloads with defaults. A backup is saved to Work History first, so you can restore it later."
+        confirmLabel="Backup & Reset"
+        danger
+        onConfirm={() => resetWorkspace()}
+        onClose={() => setConfirmResetOpen(false)}
       />
 
       <HistoryModal
