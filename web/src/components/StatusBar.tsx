@@ -59,7 +59,7 @@ export function StatusBar() {
             rel="noopener noreferrer"
             className="text-sky-600 hover:underline dark:text-sky-400"
           >
-            Innovative Experiment Co., Ltd., Thailand
+            inex
           </a>
           • Produced by{" "}
           <a
