@@ -6,6 +6,7 @@ import {
 } from "@/lib/kinematics/constants";
 import { checkWorkspaceXYZ, fkPose6DFromJointsDeg } from "@/lib/kinematics/fk";
 import type { GripperState } from "@/lib/program/types";
+import { DEFAULT_TOOL, interpretToolCommand, type ToolType } from "@/lib/tools/toolDefs";
 
 export type VirtualControllerState = "Idle" | "Run" | "Home" | "Hold" | "Alarm";
 
@@ -14,6 +15,8 @@ export type HardwareCommand =
   | { kind: "MOVE_CARTESIAN"; pose: Pose6D; feedMmPerMin?: number; gripper?: GripperState; raw: string }
   | { kind: "GRIPPER"; state: GripperState; pwm: number; label: string; raw: string }
   | { kind: "WAIT"; durationMs: number; raw: string }
+  | { kind: "CONVEYOR_MOVE"; distanceMm: number; absolute: boolean; feed?: number; raw: string }
+  | { kind: "CONVEYOR_SPEED"; percent: number; raw: string }
   | { kind: "HOME"; axis?: number; raw: string }
   | { kind: "PAUSE"; raw: string }
   | { kind: "RESUME"; raw: string }
@@ -86,6 +89,7 @@ export function parseIncomingHardwareLine(
     defaultMotionMode?: "Angle" | "Cartesian";
     defaultFeed?: number;
     addressFilter?: string; // "01" (default for IDX-485) or "ANY"
+    toolType?: ToolType; // mounted end-effector decides what M3/M4/M5 mean
   }
 ): HardwareCommand {
   const raw = String(rawLine ?? "").trim();
@@ -265,42 +269,25 @@ export function parseIncomingHardwareLine(
     return { kind: "WAIT", durationMs: Math.max(0, Math.round(sec * 1000)), raw };
   }
 
-  // M3 (Pump S1000=ON, S500=BLOW, S0=OFF; or Mirobot.cpp Servo Gripper S40=GRAB, S60=OPEN)
-  if (mCodes.includes(3)) {
-    const pwm = Math.max(0, Math.min(1000, Math.round(words.find((w) => w.letter === "S")?.value ?? 1000)));
-    let state: GripperState = "OPEN";
-    let label = `Pump OFF (M3 S${pwm})`;
-    if (pwm >= 700) {
-      state = "CLOSE";
-      label = `Suction ON / Grab (M3 S${pwm})`;
-    } else if (pwm >= 400) {
-      state = "OPEN";
-      label = `Air Blow / Release (M3 S${pwm})`;
-    } else if (pwm >= 1 && pwm <= 50) {
-      state = "CLOSE";
-      label = `Servo Gripper GRAB (M3 S${pwm})`;
-    } else if (pwm > 50) {
-      state = "OPEN";
-      label = `Servo Gripper OPEN (M3 S${pwm})`;
-    }
-    return { kind: "GRIPPER", state, pwm, label, raw };
+  // M3 / M4 / M5: meaning depends on the mounted tool (WLKATA SDK pump(): M3 S1000/S500/S0,
+  // gripper(): M3 S40/S60/S0; pneumatic gripper valve: M4 E65/E40)
+  const tool = options.toolType ?? DEFAULT_TOOL;
+  if (mCodes.includes(3) || mCodes.includes(4) || mCodes.includes(5)) {
+    const codeKind = mCodes.includes(3) ? "M3" : mCodes.includes(4) ? "M4" : "M5";
+    const value =
+      codeKind === "M3"
+        ? words.find((w) => w.letter === "S")?.value
+        : codeKind === "M4"
+          ? words.find((w) => w.letter === "E")?.value
+          : undefined;
+    const res = interpretToolCommand(tool, codeKind, value);
+    return { kind: "GRIPPER", state: res.state, pwm: res.pwm, label: res.label, raw };
   }
 
-  // M4 E65 (Gripper Grab) / M4 E40 (Gripper Open) per lab-03 & mirobot-rs485-emulator.py
-  if (mCodes.includes(4)) {
-    const eVal = Math.max(0, Math.min(100, Math.round(words.find((w) => w.letter === "E")?.value ?? 65)));
-    const state: GripperState = eVal >= 55 ? "CLOSE" : "OPEN";
-    return {
-      kind: "GRIPPER",
-      state,
-      pwm: eVal,
-      label: state === "CLOSE" ? `Gripper GRAB (M4 E${eVal})` : `Gripper OPEN (M4 E${eVal})`,
-      raw,
-    };
-  }
-
-  if (mCodes.includes(5)) {
-    return { kind: "GRIPPER", state: "OPEN", pwm: 0, label: "Gripper/Pump OFF (M5)", raw };
+  // MS4220 conveyor controller: G6 F<-100..100> (continuous speed, % of max)
+  if (gCodes.includes(6)) {
+    const f = words.find((w) => w.letter === "F")?.value ?? 0;
+    return { kind: "CONVEYOR_SPEED", percent: Math.max(-100, Math.min(100, f)), raw };
   }
 
   const isRelative = gCodes.includes(91);
@@ -314,8 +301,16 @@ export function parseIncomingHardwareLine(
 
   if (!Object.keys(axes).length) {
     // Conveyor / Rail D-axis move or modal command without XYZABC
-    if (words.some((w) => w.letter === "D")) {
-      return { kind: "ACK_ONLY", note: `External axis ${code}`, raw };
+    // Conveyor / sliding rail 7th axis (WLKATA SDK writeexpand: G90G00D100, G91G01D-20)
+    const dWord = words.find((w) => w.letter === "D");
+    if (dWord) {
+      return {
+        kind: "CONVEYOR_MOVE",
+        distanceMm: dWord.value,
+        absolute: !isRelative,
+        feed: words.find((w) => w.letter === "F")?.value,
+        raw,
+      };
     }
     return { kind: "IGNORED", reason: "No axis coordinates", raw };
   }

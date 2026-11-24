@@ -22,11 +22,14 @@ import {
   Sparkles,
   Square,
   Trash2,
+  MoveHorizontal,
+  Wrench,
 } from "lucide-react";
 import { nextBlockId } from "@/lib/program/blocks";
 import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
 import { SAMPLE_SCRIPTS } from "@/lib/program/scriptCompiler";
 import type { CodeEditorMode, ProgramBlock } from "@/lib/program/types";
+import { TOOL_DEFS, TOOL_TYPES, type ToolType } from "@/lib/tools/toolDefs";
 import { useCodeStore } from "@/stores/useCodeStore";
 import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
@@ -105,7 +108,11 @@ function BlockCard({
             ? "border-l-amber-500"
             : block.kind === "GRIPPER"
               ? "border-l-orange-500"
-              : "border-l-purple-500";
+              : block.kind === "CONVEYOR"
+                ? "border-l-teal-500"
+                : block.kind === "TOOL"
+                  ? "border-l-rose-500"
+                  : "border-l-purple-500";
 
   return (
     <div
@@ -134,7 +141,11 @@ function BlockCard({
                     ? "Wait"
                     : block.kind === "GRIPPER"
                       ? "Gripper"
-                      : "Repeat Loop"}
+                      : block.kind === "CONVEYOR"
+                        ? "Conveyor"
+                        : block.kind === "TOOL"
+                          ? "Change Tool"
+                          : "Repeat Loop"}
           </span>
         </div>
 
@@ -317,6 +328,58 @@ function BlockCard({
               CLOSE (M3)
             </button>
           </div>
+        </div>
+      )}
+
+      {block.kind === "CONVEYOR" && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+          <select
+            disabled={isLocked}
+            value={block.mode}
+            onChange={(e) =>
+              updateBlock(block.id, (b) =>
+                b.kind === "CONVEYOR"
+                  ? { ...b, mode: e.target.value as "MOVE" | "SPEED", value: e.target.value === "SPEED" ? -60 : -50 }
+                  : b
+              )
+            }
+            className="rounded border border-slate-200 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="MOVE">Move by (D)</option>
+            <option value="SPEED">Speed % (G6 F)</option>
+          </select>
+          <input
+            type="number"
+            disabled={isLocked}
+            step={block.mode === "SPEED" ? 5 : 10}
+            min={block.mode === "SPEED" ? -100 : -5000}
+            max={block.mode === "SPEED" ? 100 : 5000}
+            value={block.value}
+            onChange={(e) =>
+              updateBlock(block.id, (b) => (b.kind === "CONVEYOR" ? { ...b, value: Number(e.target.value) || 0 } : b))
+            }
+            className="w-20 rounded border border-slate-200 bg-white px-1 py-0.5 font-mono dark:border-slate-700 dark:bg-slate-950"
+          />
+          <span>{block.mode === "SPEED" ? "%" : "mm"}</span>
+        </div>
+      )}
+
+      {block.kind === "TOOL" && (
+        <div className="mt-1.5">
+          <select
+            disabled={isLocked}
+            value={block.tool}
+            onChange={(e) =>
+              updateBlock(block.id, (b) => (b.kind === "TOOL" ? { ...b, tool: e.target.value as ToolType } : b))
+            }
+            className="w-full rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+          >
+            {TOOL_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {TOOL_DEFS[t].label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -699,6 +762,26 @@ export function CodePanel() {
               <button
                 type="button"
                 disabled={isLocked}
+                onClick={() => addBlock({ id: nextBlockId(), kind: "CONVEYOR", mode: "MOVE", value: -50 })}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-teal-500/30 bg-teal-500/10 py-1.5 text-[11px] font-semibold text-teal-700 hover:bg-teal-500/20 disabled:opacity-40 dark:text-teal-300"
+              >
+                <MoveHorizontal className="h-3 w-3" />
+                Conveyor
+              </button>
+              <button
+                type="button"
+                disabled={isLocked}
+                onClick={() =>
+                  addBlock({ id: nextBlockId(), kind: "TOOL", tool: useRobotStore.getState().toolType })
+                }
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-500/20 disabled:opacity-40 dark:text-rose-300"
+              >
+                <Wrench className="h-3 w-3" />
+                Tool
+              </button>
+              <button
+                type="button"
+                disabled={isLocked}
                 onClick={() =>
                   addBlock({ id: nextBlockId(), kind: "REPEAT", count: 2, children: [] })
                 }
@@ -830,7 +913,9 @@ export function CodePanel() {
               <div>home()</div>
               <div>moveJ(j1, j2, j3, j4, j5, j6, speed=50)</div>
               <div>moveL(x, y, z, rx, ry, rz, speed=80)</div>
-              <div>gripper(&quot;open&quot; | &quot;close&quot;)</div>
+              <div>gripper(&quot;open&quot; | &quot;close&quot;) · suction(&quot;on&quot; | &quot;off&quot;) · grab() · release()</div>
+              <div>tool(&quot;SUCTION&quot; | &quot;TWO_FINGER&quot; | &quot;THREE_FINGER_SOFT&quot; | &quot;MICRO_SERVO&quot;)</div>
+              <div>conveyor(-50) · conveyorTo(0) · conveyorSpeed(-60)</div>
               <div>wait(0.5) · log(&quot;text&quot;)</div>
               <div>repeat 3: ... end</div>
             </div>

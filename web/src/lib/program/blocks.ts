@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSPACE, JOINT_LIMITS } from "@/lib/kinematics/constants";
 import { checkWorkspaceXYZ } from "@/lib/kinematics/fk";
 import { stepsToGcode } from "./gcodeCompiler";
+import { TOOL_DEFS, type ToolType } from "@/lib/tools/toolDefs";
 import type { CompileError, CompileResult, ProgramBlock, ProgramStep } from "./types";
 
 let blockSeq = 1;
@@ -78,6 +79,29 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
             label: `Gripper ${blk.state}`,
           });
           break;
+        case "CONVEYOR":
+          steps.push(
+            blk.mode === "SPEED"
+              ? {
+                  type: "CONVEYOR",
+                  mode: "SPEED",
+                  value: Math.max(-100, Math.min(100, blk.value)),
+                  blockId: blk.id,
+                  label: `Conveyor speed ${blk.value}%`,
+                }
+              : {
+                  type: "CONVEYOR",
+                  mode: "MOVE",
+                  value: blk.value,
+                  absolute: false,
+                  blockId: blk.id,
+                  label: `Conveyor move ${blk.value} mm`,
+                }
+          );
+          break;
+        case "TOOL":
+          steps.push({ type: "TOOL", tool: blk.tool, blockId: blk.id, label: `Tool: ${TOOL_DEFS[blk.tool].label}` });
+          break;
         case "REPEAT": {
           const times = Math.max(1, Math.min(50, Math.round(blk.count)));
           for (let r = 0; r < times; r++) {
@@ -122,6 +146,14 @@ export function blocksToScript(blocks: readonly ProgramBlock[], indent = ""): st
       case "GRIPPER":
         lines.push(`${indent}gripper("${blk.state.toLowerCase()}")`);
         break;
+      case "CONVEYOR":
+        lines.push(
+          blk.mode === "SPEED" ? `${indent}conveyorSpeed(${blk.value})` : `${indent}conveyor(${blk.value})`
+        );
+        break;
+      case "TOOL":
+        lines.push(`${indent}tool("${blk.tool}")`);
+        break;
       case "REPEAT":
         lines.push(`${indent}repeat ${blk.count}:`);
         lines.push(blocksToScript(blk.children, `${indent}  `));
@@ -132,9 +164,13 @@ export function blocksToScript(blocks: readonly ProgramBlock[], indent = ""): st
   return lines.join("\n");
 }
 
-export function blocksToGcode(blocks: readonly ProgramBlock[], projectName?: string): string {
+export function blocksToGcode(
+  blocks: readonly ProgramBlock[],
+  projectName?: string,
+  toolType?: ToolType
+): string {
   const res = compileBlocksProgram(blocks);
-  return stepsToGcode(res.steps, projectName);
+  return stepsToGcode(res.steps, projectName, toolType);
 }
 
 export function createDemoBlocks(): ProgramBlock[] {

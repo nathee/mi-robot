@@ -1,4 +1,5 @@
 import type { Pose6D } from "@/lib/kinematics/constants";
+import type { ToolType } from "@/lib/tools/toolDefs";
 
 export type CodeEditorMode = "BLOCKS" | "SCRIPT" | "GCODE";
 export type GripperState = "OPEN" | "CLOSE";
@@ -54,13 +55,37 @@ export interface LogStep {
   label: string;
 }
 
+/** Conveyor belt: MOVE = D-axis positional move (G90/G91 D), SPEED = MS4220 continuous speed (G6 F). */
+export interface ConveyorStep {
+  type: "CONVEYOR";
+  mode: "MOVE" | "SPEED";
+  /** MOVE: distance / target (mm). SPEED: percent -100..100. */
+  value: number;
+  absolute?: boolean;
+  feed?: number;
+  sourceLine?: number;
+  blockId?: string;
+  label: string;
+}
+
+/** Changes the mounted end-effector. */
+export interface ToolStep {
+  type: "TOOL";
+  tool: ToolType;
+  sourceLine?: number;
+  blockId?: string;
+  label: string;
+}
+
 export type ProgramStep =
   | MoveJointStep
   | MoveCartesianStep
   | WaitStep
   | GripperStep
   | HomeStep
-  | LogStep;
+  | LogStep
+  | ConveyorStep
+  | ToolStep;
 
 export interface CompileError {
   line: number;
@@ -79,4 +104,6 @@ export type ProgramBlock =
   | { id: string; kind: "MOVE_LINEAR"; pose: Pose6D; speedMmPerSec: number }
   | { id: string; kind: "WAIT"; seconds: number }
   | { id: string; kind: "GRIPPER"; state: GripperState; pwm: number }
+  | { id: string; kind: "CONVEYOR"; mode: "MOVE" | "SPEED"; value: number }
+  | { id: string; kind: "TOOL"; tool: ToolType }
   | { id: string; kind: "REPEAT"; count: number; children: ProgramBlock[] };

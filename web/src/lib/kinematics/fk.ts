@@ -102,12 +102,47 @@ export function forwardTxRxTzRz(jointsDeg: readonly number[]): Matrix4[] {
   return Ts;
 }
 
+let activeToolOffsetMm = 0;
+
+/**
+ * Sets the mounted tool's TCP offset (mm, measured outward from the flange along link6 -Z). All FK/IK helpers use it by default,
+ * so Cartesian coordinates everywhere refer to the tool tip instead of the bare flange.
+ */
+export function setActiveToolOffsetMm(mm: number): void {
+  activeToolOffsetMm = Math.max(0, finiteOr(mm, 0));
+}
+
+export function getActiveToolOffsetMm(): number {
+  return activeToolOffsetMm;
+}
+
+/**
+ * Flange-to-TCP transform (meters). The flange faces link6 -Z (MDH d6 < 0),
+ * so the tool tip lies along -Z of the link6 frame.
+ */
+export function toolTransformMatrix(toolOffsetMm = activeToolOffsetMm): Matrix4 {
+  return new Matrix4().makeTranslation(0, 0, -finiteOr(toolOffsetMm, 0) / 1000);
+}
+
+/** World TCP matrix: T0_6 * T_tool. */
+export function tcpMatrixFromJointsDeg(
+  jointsDeg: readonly number[],
+  toolOffsetMm = activeToolOffsetMm
+): Matrix4 {
+  const Ts = forwardTxRxTzRz(jointsDeg);
+  const T = Ts[Ts.length - 1].clone();
+  if (toolOffsetMm) T.multiply(toolTransformMatrix(toolOffsetMm));
+  return T;
+}
+
 /**
  * Returns TCP position (meters) and orientation (Quaternion) from 6 joint angles (degrees).
  */
-export function fkPoseFromJointsDeg(jointsDeg: readonly number[]): PoseSpatial {
-  const Ts = forwardTxRxTzRz(jointsDeg);
-  const T = Ts[Ts.length - 1];
+export function fkPoseFromJointsDeg(
+  jointsDeg: readonly number[],
+  toolOffsetMm = activeToolOffsetMm
+): PoseSpatial {
+  const T = tcpMatrixFromJointsDeg(jointsDeg, toolOffsetMm);
   const p = new Vector3();
   const q = new Quaternion();
   const s = new Vector3();
@@ -118,8 +153,11 @@ export function fkPoseFromJointsDeg(jointsDeg: readonly number[]): PoseSpatial {
 /**
  * Returns TCP Pose6D (mm / degrees, XYZ Euler) from 6 joint angles (degrees).
  */
-export function fkPose6DFromJointsDeg(jointsDeg: readonly number[]): Pose6D {
-  const pose = fkPoseFromJointsDeg(jointsDeg);
+export function fkPose6DFromJointsDeg(
+  jointsDeg: readonly number[],
+  toolOffsetMm = activeToolOffsetMm
+): Pose6D {
+  const pose = fkPoseFromJointsDeg(jointsDeg, toolOffsetMm);
   const euler = new Euler().setFromQuaternion(pose.q, "XYZ");
   return {
     x: pose.p.x * 1000,

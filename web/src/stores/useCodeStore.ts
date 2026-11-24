@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { CONVEYOR_MAX_SPEED_MM_S } from "@/lib/sim/workcell";
+import { useWorkcellStore } from "./useWorkcellStore";
 import { HOME_JOINTS, type Pose6D } from "@/lib/kinematics/constants";
 import {
   fkPose6DFromJointsDeg,
@@ -96,6 +98,21 @@ function logCode(text: string, dir: "sys" | "ok" | "error" = "sys"): void {
   useSerialStore.getState().appendLog({ dir, text: `[CODE] ${text}` });
 }
 
+/** Side effects of non-motion steps (tool action, conveyor, tool change). */
+function applyInstantStep(step: ProgramStep): void {
+  const robot = useRobotStore.getState();
+  if (step.type === "GRIPPER") {
+    robot.setGripper(step.state, step.pwm);
+  } else if (step.type === "TOOL") {
+    robot.setToolType(step.tool);
+  } else if (step.type === "CONVEYOR") {
+    const wc = useWorkcellStore.getState();
+    if (step.mode === "SPEED") wc.setConveyorSpeedPercent(step.value);
+    else wc.moveConveyor(step.value, Boolean(step.absolute), step.feed);
+    logCode(step.label);
+  }
+}
+
 function mapBlocksRecursive(
   list: ProgramBlock[],
   fn: (b: ProgramBlock) => ProgramBlock | null
@@ -120,6 +137,17 @@ function computeStepDurationMs(
 ): number {
   if (step.type === "WAIT") return Math.max(50, step.durationMs);
   if (step.type === "GRIPPER" || step.type === "LOG") return 180;
+  if (step.type === "TOOL") return 400;
+  if (step.type === "CONVEYOR") {
+    if (step.mode === "SPEED") return 180;
+    const rt = useWorkcellStore.getState().conveyorRuntime;
+    const dist = step.absolute ? step.value - rt.positionMm : step.value;
+    const speed =
+      step.feed && step.feed > 0
+        ? Math.max(5, Math.min(CONVEYOR_MAX_SPEED_MM_S, step.feed / 60))
+        : rt.moveSpeedMmS;
+    return Math.max(180, (Math.abs(dist) / speed) * 1000 + 60);
+  }
 
   if (step.type === "HOME" || step.type === "MOVE_JOINT") {
     const targetJoints = step.type === "HOME" ? HOME_JOINTS : step.joints;
@@ -302,7 +330,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       set({ errors: res.errors });
       return false;
     }
-    const gcode = blocksToGcode(get().blocks, useProjectStore.getState().name);
+    const gcode = blocksToGcode(get().blocks, useProjectStore.getState().name, useRobotStore.getState().toolType);
     set({ gcodeText: gcode, mode: "GCODE", errors: [] });
     logCode("Converted Visual Blocks → WLKATA G-code", "ok");
     return true;
@@ -321,7 +349,11 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   convertScriptToGcode() {
-    const { gcode, errors } = scriptToGcode(get().scriptText, useProjectStore.getState().name);
+    const { gcode, errors } = scriptToGcode(
+      get().scriptText,
+      useProjectStore.getState().name,
+      useRobotStore.getState().toolType
+    );
     if (errors.length) {
       set({ errors });
       return false;
@@ -335,9 +367,10 @@ export const useCodeStore = create<CodeState>((set, get) => ({
     const { mode, blocks, scriptText, gcodeText } = get();
     const projectName = useProjectStore.getState().name;
     if (mode === "GCODE") return gcodeText;
-    if (mode === "BLOCKS") return blocksToGcode(blocks, projectName);
+    const tool = useRobotStore.getState().toolType;
+    if (mode === "BLOCKS") return blocksToGcode(blocks, projectName, tool);
     const res = compileScriptProgram(scriptText);
-    return res.errors.length ? "" : stepsToGcode(res.steps, projectName);
+    return res.errors.length ? "" : stepsToGcode(res.steps, projectName, tool);
   },
 
   compileCurrent() {
@@ -347,7 +380,9 @@ export const useCodeStore = create<CodeState>((set, get) => ({
         ? compileBlocksProgram(blocks)
         : mode === "SCRIPT"
           ? compileScriptProgram(scriptText)
-          : compileGcodeProgram(gcodeText, useRobotStore.getState().joints);
+          : compileGcodeProgram(gcodeText, useRobotStore.getState().joints, {
+              toolType: useRobotStore.getState().toolType,
+            });
 
     set({ compiledSteps: res.steps, errors: res.errors });
     if (res.errors.length) {
@@ -440,8 +475,8 @@ export const useCodeStore = create<CodeState>((set, get) => ({
         set({ status: "ERROR" });
         return;
       }
-    } else if (step.type === "GRIPPER") {
-      robot.setGripper(step.state, step.pwm);
+    } else if (step.type === "GRIPPER" || step.type === "CONVEYOR" || step.type === "TOOL") {
+      applyInstantStep(step);
     } else if (step.type === "LOG") {
       logCode(step.message, "ok");
     }
@@ -487,8 +522,8 @@ export const useCodeStore = create<CodeState>((set, get) => ({
 
     // Execute instant side-effects at start of step
     if (state.runtime.elapsedMs === 0) {
-      if (step.type === "GRIPPER") {
-        robot.setGripper(step.state, step.pwm);
+      if (step.type === "GRIPPER" || step.type === "CONVEYOR" || step.type === "TOOL") {
+        applyInstantStep(step);
       } else if (step.type === "LOG") {
         logCode(step.message, "ok");
       }

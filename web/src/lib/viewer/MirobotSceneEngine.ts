@@ -1,16 +1,13 @@
 import {
   AmbientLight,
   Box3,
-  BoxGeometry,
   Color,
-  CylinderGeometry,
   DirectionalLight,
   Euler,
   Group,
   HemisphereLight,
   MathUtils,
   Mesh,
-  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -22,7 +19,9 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LINK_NAMES } from "@/lib/kinematics/constants";
-import { finiteOr, forwardTxRxTzRz } from "@/lib/kinematics/fk";
+import { finiteOr, forwardTxRxTzRz, toolTransformMatrix } from "@/lib/kinematics/fk";
+import type { ToolType } from "@/lib/tools/toolDefs";
+import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { useCodeStore } from "@/stores/useCodeStore";
 import { useHardwareStore } from "@/stores/useHardwareStore";
 import { usePathStore } from "@/stores/usePathStore";
@@ -44,6 +43,8 @@ import {
 import { createGizmoController, type GizmoController } from "./gizmos";
 import { rebuildPathVisualGroup } from "./pathVisuals";
 import { disposeObjectTree, loadMirobotSTLs } from "./stlLoader";
+import { createToolVisual, type ToolVisual } from "./toolVisuals";
+import { WorkcellView } from "./workcellVisuals";
 import { applyWorkspaceHighlight, buildWorkspaceGroup } from "./workspaceMesh";
 
 export type ViewAxisKey = "x+" | "x-" | "y+" | "y-" | "z+" | "z-";
@@ -77,11 +78,8 @@ export class MirobotSceneEngine {
   private worldFrame: Group | null = null;
   private tcpFrame: Group | null = null;
   private tcpCoordLabel: Sprite | null = null;
-  private gripperGroup: Group | null = null;
-  private gripperFingerL: Mesh | null = null;
-  private gripperFingerR: Mesh | null = null;
-  private gripperStatusMat: MeshStandardMaterial | null = null;
-  private gripperCurrentGap = 0.014;
+  private toolVisual: ToolVisual | null = null;
+  private workcellView: WorkcellView;
   private gridSet: GridBuildOutput | null = null;
   private workspaceGroup: Group | null = null;
   private pathGroup: Group;
@@ -139,6 +137,9 @@ export class MirobotSceneEngine {
     this.robotGroup.name = "mirobotArm";
     this.scene.add(this.robotGroup);
 
+    this.workcellView = new WorkcellView();
+    this.scene.add(this.workcellView.group);
+
     this.pathGroup = new Group();
     this.pathGroup.name = "taughtTargetsAndPath";
     this.scene.add(this.pathGroup);
@@ -156,7 +157,7 @@ export class MirobotSceneEngine {
     loadMirobotSTLs(this.robotGroup).then(({ links }) => {
       if (this.disposed) return;
       this.linkMeshes = links;
-      this.attachGripperVisual();
+      this.mountTool(useRobotStore.getState().toolType);
       this.applyCurrentLinkTransforms();
       this.rebuildFramesAndLabels();
       this.rebuildPathVisuals();
@@ -224,6 +225,11 @@ export class MirobotSceneEngine {
 
     this.unsubscribers.push(
       useRobotStore.subscribe((state, prev) => {
+        if (state.toolType !== prev.toolType) {
+          this.mountTool(state.toolType);
+          this.rebuildFramesAndLabels();
+          this.applyVisibility();
+        }
         if (state.workspaceStatus.out !== prev.workspaceStatus.out) {
           applyWorkspaceHighlight(this.workspaceGroup, state.workspaceStatus.out);
         }
@@ -243,53 +249,16 @@ export class MirobotSceneEngine {
     );
   }
 
-  private attachGripperVisual(): void {
+  private mountTool(type: ToolType): void {
     const link6 = this.linkMeshes.get("link6");
     if (!link6) return;
-    if (this.gripperGroup) {
-      this.gripperGroup.parent?.remove(this.gripperGroup);
-      disposeObjectTree(this.gripperGroup);
+    if (this.toolVisual) {
+      this.toolVisual.group.parent?.remove(this.toolVisual.group);
+      disposeObjectTree(this.toolVisual.group);
+      this.toolVisual = null;
     }
-
-    const grp = new Group();
-    grp.name = "mirobotGripper";
-
-    const bodyMat = new MeshStandardMaterial({ color: 0x334155, metalness: 0.45, roughness: 0.45 });
-    const fingerMat = new MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.55, roughness: 0.35 });
-    const statusMat = new MeshStandardMaterial({
-      color: 0x10b981,
-      emissive: 0x10b981,
-      emissiveIntensity: 0.55,
-      roughness: 0.3,
-    });
-
-    // Mounting flange & housing along -Z of link6 TCP
-    const flange = new Mesh(new CylinderGeometry(0.014, 0.014, 0.008, 16), bodyMat);
-    flange.rotation.x = Math.PI / 2;
-    flange.position.z = 0.004;
-    grp.add(flange);
-
-    const statusRing = new Mesh(new CylinderGeometry(0.0155, 0.0155, 0.003, 16), statusMat);
-    statusRing.rotation.x = Math.PI / 2;
-    statusRing.position.z = 0.009;
-    grp.add(statusRing);
-
-    const rail = new Mesh(new BoxGeometry(0.036, 0.012, 0.01), bodyMat);
-    rail.position.z = 0.015;
-    grp.add(rail);
-
-    const fingerGeo = new BoxGeometry(0.005, 0.008, 0.024);
-    const fingerL = new Mesh(fingerGeo, fingerMat);
-    fingerL.position.set(-0.014, 0, 0.031);
-    const fingerR = new Mesh(fingerGeo, fingerMat);
-    fingerR.position.set(0.014, 0, 0.031);
-    grp.add(fingerL, fingerR);
-
-    link6.add(grp);
-    this.gripperGroup = grp;
-    this.gripperFingerL = fingerL;
-    this.gripperFingerR = fingerR;
-    this.gripperStatusMat = statusMat;
+    this.toolVisual = createToolVisual(type);
+    link6.add(this.toolVisual.group);
   }
 
   private isDark(): boolean {
@@ -432,6 +401,7 @@ export class MirobotSceneEngine {
         axisFontSize: viewer.axisFontSize,
         subFontSize: viewer.subscriptFontSize,
       });
+      this.tcpFrame.applyMatrix4(toolTransformMatrix());
       link6.add(this.tcpFrame);
 
       this.tcpCoordLabel = createTcpCoordLabelSprite(isDark);
@@ -566,7 +536,7 @@ export class MirobotSceneEngine {
     if (!Ts.length) return null;
     const tcpPos = new Vector3();
     const tcpQuat = new Quaternion();
-    Ts[Ts.length - 1].decompose(tcpPos, tcpQuat, scale);
+    Ts[Ts.length - 1].clone().multiply(toolTransformMatrix()).decompose(tcpPos, tcpQuat, scale);
     return { tcpPos, tcpQuat };
   }
 
@@ -616,16 +586,14 @@ export class MirobotSceneEngine {
       useHardwareStore.getState().advanceHardwareMotion(dtMs);
     }
 
-    // Animate 3D gripper fingers smoothly toward target OPEN/CLOSE gap
-    if (this.gripperFingerL && this.gripperFingerR && this.gripperStatusMat) {
+    // Work-cell: conveyor belt motion + boxes carried by the tool
+    useWorkcellStore.getState().step(dtMs);
+
+    // Animate the mounted end-effector toward its OPEN / CLOSE state
+    if (this.toolVisual) {
       const isClosed = useRobotStore.getState().gripperState === "CLOSE";
-      const targetGap = isClosed ? 0.004 : 0.014;
-      this.gripperCurrentGap += (targetGap - this.gripperCurrentGap) * Math.min(1, dtMs * 0.018);
-      this.gripperFingerL.position.x = -this.gripperCurrentGap;
-      this.gripperFingerR.position.x = this.gripperCurrentGap;
-      const hex = isClosed ? 0xf59e0b : 0x10b981;
-      this.gripperStatusMat.color.setHex(hex);
-      this.gripperStatusMat.emissive.setHex(hex);
+      const held = useWorkcellStore.getState().boxes.find((b) => b.held);
+      this.toolVisual.update(dtMs, isClosed, held ? held.size : null);
     }
 
     this.controls.update();
@@ -633,6 +601,15 @@ export class MirobotSceneEngine {
 
     const tcp = this.applyCurrentLinkTransforms();
     const viewer = useViewerStore.getState();
+
+    const wc = useWorkcellStore.getState();
+    this.workcellView.group.visible = viewer.showWorkcell;
+    this.workcellView.sync({
+      boxes: wc.boxes,
+      platforms: wc.platforms,
+      conveyor: wc.conveyor,
+      conveyorPositionMm: wc.conveyorRuntime.positionMm,
+    });
 
     if (tcp) {
       this.gizmos.syncTcpHandleToPose(tcp.tcpPos, tcp.tcpQuat);

@@ -1,5 +1,7 @@
 import type { PathProgramSettings, PathTarget } from "@/lib/kinematics/constants";
 import type { CodeEditorMode, GripperState, ProgramBlock } from "@/lib/program/types";
+import type { ToolType } from "@/lib/tools/toolDefs";
+import type { WorkcellSnapshot } from "@/lib/sim/workcell";
 
 export const AUTOSAVE_STORAGE_KEY = "mirobot:autosave:v1";
 export const HISTORY_STORAGE_KEY = "mirobot:history:v1";
@@ -9,6 +11,9 @@ export interface WorkspaceSnapshotData {
   projectName: string;
   joints: number[];
   gripperState: GripperState;
+  /** Optional for snapshots saved before end-effectors were selectable. */
+  toolType?: ToolType;
+  workcell?: WorkcellSnapshot;
   pathTargets: PathTarget[];
   pathSettings: PathProgramSettings;
   pathRepeatCount: number;

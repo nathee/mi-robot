@@ -16,6 +16,7 @@ import {
   finiteOr,
   fkPoseFromJointsDeg,
   forwardTxRxTzRz,
+  getActiveToolOffsetMm,
   wrapDeg,
   wrapRad,
 } from "./fk";
@@ -362,7 +363,9 @@ function IOK_numeric(
 function wristCenterFromTarget(target: TargetPoseMatrix, d6Sign = 1): Vector3 {
   const z_e = new Vector3(0, 0, 1).applyMatrix3(target.R);
   const d6m = (MDH_PARAMS[5].d / 1000) * d6Sign;
-  return target.p.clone().addScaledVector(z_e, -d6m);
+  // TCP -> flange (tool tip lies along link6 -Z) -> wrist centre
+  const toolM = getActiveToolOffsetMm() / 1000;
+  return target.p.clone().addScaledVector(z_e, toolM - d6m);
 }
 
 export function solveIK_AnalyticOnce(

@@ -17,6 +17,7 @@ import {
   type ViewAxisKey,
   type ViewGizmoProjection,
 } from "@/lib/viewer/MirobotSceneEngine";
+import { TOOL_DEFS, toolCodeFor } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useViewerStore, type FrameAxesVisibility } from "@/stores/useViewerStore";
 
@@ -52,6 +53,8 @@ export function ViewerCanvas() {
   const workspaceStatus = useRobotStore((s) => s.workspaceStatus);
   const gripperState = useRobotStore((s) => s.gripperState);
   const setGripper = useRobotStore((s) => s.setGripper);
+  const toolType = useRobotStore((s) => s.toolType);
+  const toolDef = TOOL_DEFS[toolType];
 
   useEffect(() => {
     const host = hostRef.current;
@@ -275,6 +278,7 @@ export function ViewerCanvas() {
                       ["showGrid", "Grid XY"],
                       ["showZGrid", "Grid Z"],
                       ["showWorkspace", "Workspace"],
+                      ["showWorkcell", "Workcell"],
                       ["showTcpFrame", "TCP Frame"],
                       ["showTcpValue", "3D TCP Tag"],
                       ["showWorldFrame", "Ground Frame"],
@@ -407,7 +411,7 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => setGripper(gripperState === "OPEN" ? "CLOSE" : "OPEN")}
-            title="Click to toggle 3D Gripper (M3/M5)"
+            title={`${toolDef.label}: click to ${gripperState === "OPEN" ? toolDef.grabLabel.toLowerCase() : toolDef.releaseLabel.toLowerCase()} (${toolCodeFor(toolType, gripperState === "OPEN" ? "CLOSE" : "OPEN")})`}
             className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[10px] font-bold transition ${
               gripperState === "CLOSE"
                 ? "bg-amber-500/20 text-amber-600 hover:bg-amber-500/30 dark:text-amber-400"
@@ -419,7 +423,7 @@ export function ViewerCanvas() {
                 gripperState === "CLOSE" ? "bg-amber-500" : "bg-emerald-500"
               }`}
             />
-            Grip: {gripperState}
+            {toolDef.shortLabel}: {gripperState === "CLOSE" ? toolDef.grabLabel : toolDef.releaseLabel}
           </button>
         </div>
       </div>

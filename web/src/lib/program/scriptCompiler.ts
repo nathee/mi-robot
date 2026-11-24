@@ -1,6 +1,7 @@
 import { DEFAULT_WORKSPACE, JOINT_LIMITS, type Pose6D } from "@/lib/kinematics/constants";
 import { checkWorkspaceXYZ } from "@/lib/kinematics/fk";
 import { stepsToGcode } from "./gcodeCompiler";
+import { isToolType, TOOL_TYPES, type ToolType } from "@/lib/tools/toolDefs";
 import type { CompileError, CompileResult, ProgramStep } from "./types";
 
 interface ScriptNodeLine {
@@ -172,20 +173,59 @@ export function compileScriptProgram(source: string): CompileResult {
             sourceLine: line,
             label: `wait(${sec}s)`,
           });
-        } else if (fn === "gripper" || fn === "suction") {
-          const strMatch = argsRaw.match(/^["'](open|close|on|off)["']$/i);
-          if (!strMatch) {
-            throw new Error(`gripper() expects "open" or "close"`);
+        } else if (fn === "gripper" || fn === "suction" || fn === "grab" || fn === "release") {
+          let state: "OPEN" | "CLOSE";
+          if (fn === "grab" || fn === "release") {
+            if (argsRaw) throw new Error(`${fn}() takes no arguments`);
+            state = fn === "grab" ? "CLOSE" : "OPEN";
+          } else {
+            const strMatch = argsRaw.match(/^["'](open|close|on|off)["']$/i);
+            if (!strMatch) {
+              throw new Error(
+                fn === "suction" ? `suction() expects "on" or "off"` : `gripper() expects "open" or "close"`
+              );
+            }
+            const arg = strMatch[1].toLowerCase();
+            state = arg === "close" || arg === "on" ? "CLOSE" : "OPEN";
           }
-          const arg = strMatch[1].toLowerCase();
-          const state = arg === "close" || arg === "on" ? "CLOSE" : "OPEN";
+          const word =
+            fn === "suction" ? (state === "CLOSE" ? "on" : "off") : state === "CLOSE" ? "close" : "open";
           steps.push({
             type: "GRIPPER",
             state,
             pwm: state === "CLOSE" ? 1000 : 0,
             sourceLine: line,
-            label: `gripper("${state.toLowerCase()}")`,
+            label: fn === "grab" || fn === "release" ? `${fn}()` : `${fn}("${word}")`,
           });
+        } else if (fn === "tool") {
+          const strMatch = argsRaw.match(/^["']([A-Za-z_]+)["']$/);
+          const name = strMatch?.[1].toUpperCase();
+          if (!isToolType(name)) {
+            throw new Error(`tool() expects one of: ${TOOL_TYPES.map((t) => `"${t}"`).join(", ")}`);
+          }
+          steps.push({ type: "TOOL", tool: name, sourceLine: line, label: `tool("${name}")` });
+        } else if (fn === "conveyor" || fn === "conveyorto") {
+          const { positional } = parseNumericArgs(argsRaw);
+          const d = positional[0];
+          if (!Number.isFinite(d) || Math.abs(d) > 5000) {
+            throw new Error(`${callMatch[1]}(mm) expects a distance between -5000 and 5000`);
+          }
+          const absolute = fn === "conveyorto";
+          steps.push({
+            type: "CONVEYOR",
+            mode: "MOVE",
+            value: d,
+            absolute,
+            sourceLine: line,
+            label: `${callMatch[1]}(${d})`,
+          });
+        } else if (fn === "conveyorspeed") {
+          const { positional } = parseNumericArgs(argsRaw);
+          const p = positional[0];
+          if (!Number.isFinite(p) || p < -100 || p > 100) {
+            throw new Error("conveyorSpeed(percent) expects a number between -100 and 100");
+          }
+          steps.push({ type: "CONVEYOR", mode: "SPEED", value: p, sourceLine: line, label: `conveyorSpeed(${p})` });
         } else if (fn === "log" || fn === "print") {
           const msgMatch = argsRaw.match(/^["'](.*)["']$/);
           const message = msgMatch ? msgMatch[1] : argsRaw;
@@ -215,15 +255,94 @@ export function compileScriptProgram(source: string): CompileResult {
   return { steps, errors, warnings };
 }
 
-export function scriptToGcode(source: string, projectName?: string): { gcode: string; errors: CompileError[] } {
+export function scriptToGcode(
+  source: string,
+  projectName?: string,
+  toolType?: ToolType
+): { gcode: string; errors: CompileError[] } {
   const res = compileScriptProgram(source);
   return {
-    gcode: res.errors.length ? "" : stepsToGcode(res.steps, projectName),
+    gcode: res.errors.length ? "" : stepsToGcode(res.steps, projectName, toolType),
     errors: res.errors,
   };
 }
 
 export const SAMPLE_SCRIPTS: Record<string, { name: string; code: string }> = {
+  conveyorPick: {
+    name: "Conveyor → Pick → Tray (Suction)",
+    code: `# Workcell preset "Conveyor Feed" (Tools tab → Workcell)
+# The conveyor brings each box to the end stop, the suction cup
+# picks it up and places it on the tray.
+tool("SUCTION")
+home()
+
+log("Box 1")
+conveyor(-80)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 70, 110, 0, 0, 0, speed=100)
+  moveL(200, 70, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 70, 110, 0, 0, 0, speed=90)
+
+log("Box 2")
+conveyor(-80)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 110, 110, 0, 0, 0, speed=100)
+  moveL(200, 110, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 110, 110, 0, 0, 0, speed=90)
+
+log("Box 3")
+conveyor(-80)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 150, 110, 0, 0, 0, speed=100)
+  moveL(200, 150, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 150, 110, 0, 0, 0, speed=90)
+
+home()
+log("All boxes on the tray!")
+`,
+  },
+  softGripper: {
+    name: "Tray → Conveyor (Soft Gripper)",
+    code: `# Workcell preset "Pick & Place" (Tools tab → Workcell)
+# The three-finger soft gripper moves a box from the tray onto the conveyor,
+# then the conveyor carries it away.
+tool("THREE_FINGER_SOFT")
+home()
+gripper("open")
+moveL(200, 110, 120, 0, 0, 0, speed=90)
+moveL(200, 110, 40, 0, 0, 0, speed=40)
+gripper("close")
+wait(0.4)
+moveL(200, 110, 140, 0, 0, 0, speed=90)
+moveL(230, -150, 140, 0, 0, 0, speed=100)
+moveL(230, -150, 82, 0, 0, 0, speed=40)
+gripper("open")
+wait(0.4)
+moveL(230, -150, 140, 0, 0, 0, speed=90)
+home()
+conveyorSpeed(-60)
+wait(2)
+conveyorSpeed(0)
+`,
+  },
   pickLoop: {
     name: "Pick & Place Loop (x2)",
     code: `# Easy Mirobot Pick & Place Script

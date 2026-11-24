@@ -12,7 +12,9 @@ import {
   finiteOr,
   fkPose6DFromJointsDeg,
   pose6DToTargetMatrix,
+  setActiveToolOffsetMm,
 } from "@/lib/kinematics/fk";
+import { DEFAULT_TOOL, TOOL_DEFS, toolCodeFor, type ToolType } from "@/lib/tools/toolDefs";
 import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
@@ -37,12 +39,14 @@ interface RobotState {
   workspaceStatus: WorkspaceStatusState;
   gripperState: GripperState;
   gripperPwm: number;
+  toolType: ToolType;
 
   setJoint: (index: number, deg: number, options?: { log?: boolean }) => void;
   stepJoint: (index: number, deltaDeg: number) => void;
   setJoints: (joints: readonly number[], options?: { syncIk?: boolean }) => void;
   setHome: () => void;
-  setGripper: (state: GripperState, pwm?: number) => void;
+  setGripper: (state: GripperState, pwm?: number, options?: { label?: string; log?: boolean }) => void;
+  setToolType: (tool: ToolType, options?: { log?: boolean }) => void;
   syncIkTargetFromJoints: (joints?: readonly number[]) => void;
   setIkTarget: (partial: Partial<Pose6D>) => boolean;
   rollbackIkTarget: () => void;
@@ -54,6 +58,7 @@ interface RobotState {
   clearWorkspaceError: () => void;
 }
 
+setActiveToolOffsetMm(TOOL_DEFS[DEFAULT_TOOL].tcpOffsetMm);
 const initialHomePose = fkPose6DFromJointsDeg(HOME_JOINTS);
 
 let lastWsErrLogAt = 0;
@@ -81,6 +86,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   workspaceStatus: { out: false, message: "" },
   gripperState: "OPEN",
   gripperPwm: 0,
+  toolType: DEFAULT_TOOL,
 
   setJoint(index, deg, options = {}) {
     const prev = get().joints[index];
@@ -142,16 +148,33 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     });
   },
 
-  setGripper(state, pwm) {
+  setGripper(state, pwm, options = {}) {
     const resolvedPwm = state === "CLOSE" ? Math.max(1, Math.min(1000, pwm ?? 1000)) : 0;
     set({ gripperState: state, gripperPwm: resolvedPwm });
+    if (options.log === false) return;
+    const def = TOOL_DEFS[get().toolType];
     useSerialStore.getState().appendLog({
       dir: "sys",
       text:
-        state === "CLOSE"
-          ? `Gripper CLOSED (M3 S${resolvedPwm})`
-          : "Gripper OPENED (M5)",
+        options.label ??
+        `${def.label}: ${state === "CLOSE" ? def.grabLabel : def.releaseLabel} (${toolCodeFor(def.type, state)})`,
     });
+  },
+
+  setToolType(tool, options = {}) {
+    const prev = get().toolType;
+    if (prev === tool) return;
+    const def = TOOL_DEFS[tool];
+    setActiveToolOffsetMm(def.tcpOffsetMm);
+    // Changing the tool releases whatever was held and re-expresses the pose at the new TCP.
+    set({ toolType: tool, gripperState: "OPEN", gripperPwm: 0 });
+    get().syncIkTargetFromJoints();
+    if (options.log !== false) {
+      useSerialStore.getState().appendLog({
+        dir: "sys",
+        text: `Tool changed: ${TOOL_DEFS[prev].label} -> ${def.label} (TCP offset ${def.tcpOffsetMm} mm)`,
+      });
+    }
   },
 
   syncIkTargetFromJoints(joints) {

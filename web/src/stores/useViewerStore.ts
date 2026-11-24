@@ -8,7 +8,7 @@ import {
 } from "@/lib/kinematics/constants";
 
 export type PoseMode = "JOINT" | "IK";
-export type SidebarPanel = "JOG" | "PATH" | "CODE";
+export type SidebarPanel = "JOG" | "TOOLS" | "PATH" | "CODE";
 export type TcpTransformMode = "translate" | "rotate";
 
 export interface FrameAxesVisibility {
@@ -36,6 +36,7 @@ export interface ViewerState {
   showTcpFrame: boolean;
   showTcpValue: boolean;
   showWorkspace: boolean;
+  showWorkcell: boolean;
   showPath: boolean;
   showPoints: boolean;
   showPointFrames: boolean;
@@ -100,6 +101,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   showTcpFrame: true,
   showTcpValue: false,
   showWorkspace: true,
+  showWorkcell: true,
   showPath: true,
   showPoints: true,
   showPointFrames: false,

@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { isToolType } from "@/lib/tools/toolDefs";
+import { useWorkcellStore } from "./useWorkcellStore";
 import { clonePathTarget, normalizePathProgramSettings } from "@/lib/path/gcode";
 import {
   loadAutosaveFromStorage,
@@ -45,6 +47,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       projectName: project.name,
       joints: robot.joints.slice(),
       gripperState: robot.gripperState,
+      toolType: robot.toolType,
+      workcell: useWorkcellStore.getState().snapshot(),
       pathTargets: path.targets.map(clonePathTarget),
       pathSettings: normalizePathProgramSettings(path.settings),
       pathRepeatCount: path.repeatCount,
@@ -60,7 +64,11 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     useCodeStore.getState().stop();
 
     useRobotStore.getState().setJoints(data.joints, { syncIk: true });
-    useRobotStore.getState().setGripper(data.gripperState);
+    if (isToolType(data.toolType)) {
+      useRobotStore.getState().setToolType(data.toolType, { log: false });
+    }
+    useRobotStore.getState().setGripper(data.gripperState, undefined, { log: false });
+    if (data.workcell) useWorkcellStore.getState().loadSnapshot(data.workcell);
 
     const targets = data.pathTargets.map(clonePathTarget);
     const nextId = Math.max(0, ...targets.map((t) => t.id)) + 1;

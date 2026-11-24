@@ -10,6 +10,7 @@ import {
   type VirtualControllerState,
 } from "@/lib/hardware/protocol";
 import { useCodeStore } from "./useCodeStore";
+import { useWorkcellStore } from "./useWorkcellStore";
 import { usePathStore } from "./usePathStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
@@ -200,6 +201,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       defaultMotionMode: state.lastMotionSpace,
       defaultFeed: state.defaultFeed,
       addressFilter: state.addressFilter,
+      toolType: robot.toolType,
     });
 
     // Shared RS-485 Bus Monitor for HMI-485 (@99...): decode telemetry silently, NEVER reply!
@@ -303,6 +305,26 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       return;
     }
 
+    if (cmd.kind === "CONVEYOR_MOVE") {
+      useWorkcellStore.getState().moveConveyor(cmd.distanceMm, cmd.absolute, cmd.feed);
+      useSerialStore.getState().appendLog({
+        dir: "sys",
+        text: `[RS485] Conveyor ${cmd.absolute ? "move to" : "move by"} D${cmd.distanceMm} mm`,
+      });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    if (cmd.kind === "CONVEYOR_SPEED") {
+      useWorkcellStore.getState().setConveyorSpeedPercent(cmd.percent);
+      useSerialStore.getState().appendLog({
+        dir: "sys",
+        text: `[RS485] Conveyor speed ${cmd.percent}% (G6 F${cmd.percent})`,
+      });
+      replyIfEnabled("ok");
+      return;
+    }
+
     if (cmd.kind === "ACK_ONLY") {
       useSerialStore.getState().appendLog({ dir: "sys", text: `[RS485] ${cmd.note}` });
       replyIfEnabled("ok");
@@ -380,7 +402,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         },
       });
     } else if (cmd.kind === "GRIPPER") {
-      robot.setGripper(cmd.state, cmd.pwm);
+      robot.setGripper(cmd.state, cmd.pwm, { label: `[RS485] ${cmd.label}` });
       const isValve = /M4/i.test(cmd.raw);
       set({
         pumpPwm: isValve ? state.pumpPwm : cmd.pwm,
