@@ -7,6 +7,7 @@ import {
   Blocks,
   Clock,
   Code2,
+  Copy,
   Download,
   FileCode2,
   Grip,
@@ -25,7 +26,6 @@ import {
   Square,
   Trash2,
   Wrench,
-  Copy,
 } from "lucide-react";
 import { nextBlockId } from "@/lib/program/blocks";
 import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
@@ -48,7 +48,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 const PALETTE_BTN =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-700 transition hover:border-sky-400/70 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-700 dark:hover:bg-slate-800";
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 py-2 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-sky-400/70 hover:bg-sky-50/60 hover:text-sky-700 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-sky-500/60 dark:hover:bg-slate-800";
 
 function appendLine(text: string, line: string): string {
   const trimmed = text.replace(/\s*$/, "");
@@ -61,6 +61,7 @@ interface BlockCardProps {
   isActive: boolean;
   isLocked: boolean;
   activeBlockId: string | null;
+  nested?: boolean;
   onDragStart?: () => void;
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: () => void;
@@ -72,6 +73,7 @@ function BlockCard({
   isActive,
   isLocked,
   activeBlockId,
+  nested = false,
   onDragStart,
   onDragOver,
   onDrop,
@@ -128,23 +130,27 @@ function BlockCard({
                     ? "border-l-cyan-500"
                     : "border-l-purple-500";
 
+  const coordGridCols = nested ? "grid-cols-2" : "grid-cols-3";
+
   return (
     <div
       draggable={!isLocked && Boolean(onDragStart)}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`rounded-xl border border-l-4 bg-white p-2.5 text-xs transition dark:bg-slate-900/70 ${accent} ${
+      className={`rounded-xl border border-l-4 bg-white p-3 text-xs shadow-2xs transition dark:bg-slate-900/75 ${accent} ${
         isActive
           ? "border-sky-400 ring-2 ring-sky-400/40"
           : "border-slate-200/80 dark:border-slate-800/90"
       }`}
     >
-      <div className="flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5">
-          {onDragStart && <GripVertical className="h-3.5 w-3.5 cursor-grab text-slate-400" />}
-          <span className="font-mono text-[10px] tabular-nums text-slate-400">#{index + 1}</span>
-          <span className="font-semibold text-slate-800 dark:text-slate-100">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {onDragStart && <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-slate-400" />}
+          <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            #{index + 1}
+          </span>
+          <span className="truncate font-semibold text-slate-900 dark:text-slate-100">
             {block.kind === "HOME"
               ? "Home"
               : block.kind === "MOVE_JOINT"
@@ -165,14 +171,14 @@ function BlockCard({
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {(block.kind === "MOVE_JOINT" || block.kind === "MOVE_LINEAR") && (
             <button
               type="button"
               disabled={isLocked}
               onClick={captureCurrentIntoBlock}
               title="Set this block to the robot's current pose"
-              className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
+              className="rounded-lg bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
             >
               Use Pose
             </button>
@@ -183,7 +189,7 @@ function BlockCard({
             onClick={() => duplicateBlock(block.id)}
             title="Duplicate block"
             aria-label="Duplicate block"
-            className="rounded-md p-0.5 text-slate-400 transition hover:bg-sky-50 hover:text-sky-500 disabled:opacity-35 dark:hover:bg-sky-950/50"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600 disabled:opacity-35 dark:hover:bg-sky-950/50 dark:hover:text-sky-400"
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
@@ -193,7 +199,7 @@ function BlockCard({
             onClick={() => removeBlock(block.id)}
             title="Remove block"
             aria-label="Remove block"
-            className="rounded-md p-0.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-35 dark:hover:bg-rose-950/50"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-35 dark:hover:bg-rose-950/50"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -202,14 +208,16 @@ function BlockCard({
 
       {/* Block-specific inline editors */}
       {block.kind === "MOVE_JOINT" && (
-        <div className="mt-2 space-y-1.5">
-          <div className="grid grid-cols-3 gap-1">
+        <div className="mt-2.5 space-y-2">
+          <div className={`grid ${coordGridCols} gap-1.5`}>
             {block.joints.map((val, jIdx) => (
               <label
                 key={jIdx}
-                className="flex items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700/80 dark:bg-slate-950"
+                className="flex items-center gap-1 rounded-lg border border-slate-200/90 bg-slate-50 px-2 py-1 dark:border-slate-700/80 dark:bg-slate-950"
               >
-                <span className="font-mono text-[10px] text-slate-400">J{jIdx + 1}</span>
+                <span className="font-mono text-[10px] font-semibold text-slate-400">
+                  J{jIdx + 1}
+                </span>
                 <NumericInput
                   aria-label={`J${jIdx + 1}`}
                   step={1}
@@ -224,12 +232,12 @@ function BlockCard({
                       return { ...b, joints: next };
                     });
                   }}
-                  className="w-full bg-transparent text-right font-mono text-[11px] font-medium outline-none"
+                  className="w-full min-w-0 bg-transparent text-right font-mono text-xs font-medium outline-none"
                 />
               </label>
             ))}
           </div>
-          <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
+          <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <span>Speed (°/s)</span>
             <NumericInput
               aria-label="Joint speed"
@@ -244,21 +252,23 @@ function BlockCard({
                   b.kind === "MOVE_JOINT" ? { ...b, speedDegPerSec: v } : b
                 )
               }
-              className="w-14 rounded-md border border-slate-200 bg-slate-50 px-1 py-0.5 text-center font-mono text-[11px] outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+              className="h-7 w-16 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
             />
           </div>
         </div>
       )}
 
       {block.kind === "MOVE_LINEAR" && (
-        <div className="mt-2 space-y-1.5">
-          <div className="grid grid-cols-3 gap-1">
+        <div className="mt-2.5 space-y-2">
+          <div className={`grid ${coordGridCols} gap-1.5`}>
             {(["x", "y", "z", "rx", "ry", "rz"] as const).map((axis) => (
               <label
                 key={axis}
-                className="flex items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-1.5 py-0.5 dark:border-slate-700/80 dark:bg-slate-950"
+                className="flex items-center gap-1 rounded-lg border border-slate-200/90 bg-slate-50 px-2 py-1 dark:border-slate-700/80 dark:bg-slate-950"
               >
-                <span className="font-mono text-[10px] uppercase text-slate-400">{axis}</span>
+                <span className="font-mono text-[10px] font-semibold uppercase text-slate-400">
+                  {axis}
+                </span>
                 <NumericInput
                   aria-label={axis}
                   step={1}
@@ -272,12 +282,12 @@ function BlockCard({
                         : b
                     );
                   }}
-                  className="w-full bg-transparent text-right font-mono text-[11px] font-medium outline-none"
+                  className="w-full min-w-0 bg-transparent text-right font-mono text-xs font-medium outline-none"
                 />
               </label>
             ))}
           </div>
-          <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
+          <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <span>Speed (mm/s)</span>
             <NumericInput
               aria-label="Linear speed"
@@ -292,14 +302,14 @@ function BlockCard({
                   b.kind === "MOVE_LINEAR" ? { ...b, speedMmPerSec: v } : b
                 )
               }
-              className="w-14 rounded-md border border-slate-200 bg-slate-50 px-1 py-0.5 text-center font-mono text-[11px] outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+              className="h-7 w-16 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
             />
           </div>
         </div>
       )}
 
       {block.kind === "WAIT" && (
-        <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+        <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <span>Delay</span>
           <NumericInput
             aria-label="Wait seconds"
@@ -314,14 +324,14 @@ function BlockCard({
                 b.kind === "WAIT" ? { ...b, seconds: Math.max(0.1, v) } : b
               )
             }
-            className="w-16 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+            className="h-7 w-18 rounded-lg border border-slate-200 bg-slate-50 px-2 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
-          <span>sec</span>
+          <span className="text-slate-500">sec</span>
         </div>
       )}
 
       {block.kind === "GRIPPER" && (
-        <div className="mt-1.5 flex items-center gap-2">
+        <div className="mt-2.5 flex items-center gap-2">
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-950">
             <button
               type="button"
@@ -331,10 +341,10 @@ function BlockCard({
                   b.kind === "GRIPPER" ? { ...b, state: "OPEN", pwm: 0 } : b
                 )
               }
-              className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition ${
+              className={`rounded-md px-3 py-1 text-[11px] font-semibold transition ${
                 block.state === "OPEN"
-                  ? "bg-emerald-600 text-white"
-                  : "text-slate-500 dark:text-slate-400"
+                  ? "bg-emerald-600 text-white shadow-2xs"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               OPEN (M5)
@@ -347,10 +357,10 @@ function BlockCard({
                   b.kind === "GRIPPER" ? { ...b, state: "CLOSE", pwm: 1000 } : b
                 )
               }
-              className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition ${
+              className={`rounded-md px-3 py-1 text-[11px] font-semibold transition ${
                 block.state === "CLOSE"
-                  ? "bg-amber-500 text-white"
-                  : "text-slate-500 dark:text-slate-400"
+                  ? "bg-amber-500 text-white shadow-2xs"
+                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               CLOSE (M3)
@@ -360,7 +370,7 @@ function BlockCard({
       )}
 
       {block.kind === "CONVEYOR" && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <select
             disabled={isLocked}
             value={block.mode}
@@ -375,7 +385,7 @@ function BlockCard({
                   : b
               )
             }
-            className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 outline-none dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="MOVE">Move by (D)</option>
             <option value="SPEED">Speed % (G6 F)</option>
@@ -392,14 +402,14 @@ function BlockCard({
             onChange={(v) =>
               updateBlock(block.id, (b) => (b.kind === "CONVEYOR" ? { ...b, value: v } : b))
             }
-            className="w-18 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-center font-mono outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-20 rounded-lg border border-slate-200 bg-slate-50 px-2 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
-          <span>{block.mode === "MOVE" ? "mm" : "%"}</span>
+          <span className="text-slate-500">{block.mode === "MOVE" ? "mm" : "%"}</span>
         </div>
       )}
 
       {block.kind === "WAIT_SENSOR" && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
           <select
             disabled={isLocked}
             value={block.until}
@@ -408,12 +418,12 @@ function BlockCard({
                 b.kind === "WAIT_SENSOR" ? { ...b, until: e.target.value as "BLOCKED" | "CLEAR" } : b
               )
             }
-            className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 outline-none dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
             <option value="BLOCKED">Box arrives</option>
             <option value="CLEAR">Beam clear</option>
           </select>
-          <span>timeout</span>
+          <span className="text-slate-500">timeout</span>
           <NumericInput
             aria-label="Sensor timeout seconds"
             disabled={isLocked}
@@ -427,14 +437,14 @@ function BlockCard({
                 b.kind === "WAIT_SENSOR" ? { ...b, timeoutSec: Math.max(1, v) } : b
               )
             }
-            className="w-14 rounded-md border border-slate-200 bg-slate-50 px-1 py-0.5 text-center font-mono outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-16 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
           />
-          <span>s</span>
+          <span className="text-slate-500">s</span>
         </div>
       )}
 
       {block.kind === "TOOL" && (
-        <div className="mt-1.5">
+        <div className="mt-2.5">
           <select
             disabled={isLocked}
             value={block.tool}
@@ -443,7 +453,7 @@ function BlockCard({
                 b.kind === "TOOL" ? { ...b, tool: e.target.value as ToolType } : b
               )
             }
-            className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] outline-none dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
             {TOOL_TYPES.map((t) => (
               <option key={t} value={t}>
@@ -455,9 +465,9 @@ function BlockCard({
       )}
 
       {block.kind === "REPEAT" && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2.5 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
               <span>Times</span>
               <NumericInput
                 aria-label="Repeat times"
@@ -474,11 +484,11 @@ function BlockCard({
                       : b
                   )
                 }
-                className="w-12 rounded-md border border-slate-200 bg-slate-50 px-1 py-0.5 text-center font-mono text-xs font-semibold outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+                className="h-7 w-14 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-center font-mono text-xs font-semibold outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
               />
             </label>
 
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 disabled={isLocked}
@@ -494,9 +504,35 @@ function BlockCard({
                     block.id
                   );
                 }}
-                className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 transition hover:bg-blue-500/20 dark:text-blue-400"
+                className="rounded-lg bg-blue-500/10 px-2 py-1 text-[11px] font-semibold text-blue-600 transition hover:bg-blue-500/20 dark:text-blue-400"
               >
                 + MoveJ
+              </button>
+              <button
+                type="button"
+                disabled={isLocked}
+                onClick={() => {
+                  const p = useRobotStore.getState().eePose;
+                  addBlock(
+                    {
+                      id: nextBlockId(),
+                      kind: "MOVE_LINEAR",
+                      pose: {
+                        x: Number(p.x.toFixed(1)),
+                        y: Number(p.y.toFixed(1)),
+                        z: Number(p.z.toFixed(1)),
+                        rx: Number(p.rx.toFixed(1)),
+                        ry: Number(p.ry.toFixed(1)),
+                        rz: Number(p.rz.toFixed(1)),
+                      },
+                      speedMmPerSec: 80,
+                    },
+                    block.id
+                  );
+                }}
+                className="rounded-lg bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+              >
+                + MoveL
               </button>
               <button
                 type="button"
@@ -504,7 +540,7 @@ function BlockCard({
                 onClick={() =>
                   addBlock({ id: nextBlockId(), kind: "GRIPPER", state: "CLOSE", pwm: 1000 }, block.id)
                 }
-                className="rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600 transition hover:bg-orange-500/20 dark:text-orange-400"
+                className="rounded-lg bg-orange-500/10 px-2 py-1 text-[11px] font-semibold text-orange-600 transition hover:bg-orange-500/20 dark:text-orange-400"
               >
                 + Grip
               </button>
@@ -514,16 +550,16 @@ function BlockCard({
                 onClick={() =>
                   addBlock({ id: nextBlockId(), kind: "WAIT", seconds: 0.4 }, block.id)
                 }
-                className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 transition hover:bg-amber-500/20 dark:text-amber-400"
+                className="rounded-lg bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-600 transition hover:bg-amber-500/20 dark:text-amber-400"
               >
                 + Wait
               </button>
             </div>
           </div>
 
-          <div className="space-y-1.5 border-l-2 border-purple-500/35 pl-2">
+          <div className="space-y-2 border-l-2 border-purple-500/35 pl-2.5">
             {block.children.length === 0 ? (
-              <div className="py-1 text-[10px] text-slate-400">
+              <div className="py-1.5 text-[11px] text-slate-400">
                 Empty loop — add a child block above.
               </div>
             ) : (
@@ -535,6 +571,7 @@ function BlockCard({
                   isActive={activeBlockId === child.id}
                   isLocked={isLocked}
                   activeBlockId={activeBlockId}
+                  nested
                 />
               ))
             )}
@@ -569,7 +606,7 @@ function LineCodeEditor({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const lines = value.split("\n");
-  const totalLines = Math.max(11, lines.length);
+  const totalLines = Math.max(16, lines.length);
 
   const syncScroll = () => {
     const ta = textareaRef.current;
@@ -579,13 +616,13 @@ function LineCodeEditor({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 font-mono text-[11px] dark:border-slate-800">
-      <div className="relative flex h-64">
+    <div className="flex min-h-[280px] flex-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 font-mono text-xs shadow-2xs dark:border-slate-800">
+      <div className="relative flex w-full flex-1">
         {/* Synced Line Numbers Gutter */}
         <div
           ref={gutterRef}
           aria-hidden
-          className="w-9 shrink-0 select-none overflow-hidden border-r border-slate-800/90 bg-slate-900/90 py-2 text-right text-slate-500"
+          className="w-10 shrink-0 select-none overflow-hidden border-r border-slate-800/90 bg-slate-900/90 py-2.5 text-right text-[11px] text-slate-500"
         >
           {Array.from({ length: totalLines }, (_, idx) => {
             const ln = idx + 1;
@@ -594,7 +631,7 @@ function LineCodeEditor({
             return (
               <div
                 key={ln}
-                className={`h-5 px-2 leading-5 tabular-nums ${
+                className={`h-[22px] px-2 leading-[22px] tabular-nums ${
                   isErr
                     ? "bg-rose-500/30 font-bold text-rose-300"
                     : isExec
@@ -613,7 +650,7 @@ function LineCodeEditor({
           <div
             ref={highlightRef}
             aria-hidden
-            className="pointer-events-none absolute inset-0 overflow-hidden py-2"
+            className="pointer-events-none absolute inset-0 overflow-hidden py-2.5"
           >
             {Array.from({ length: totalLines }, (_, idx) => {
               const ln = idx + 1;
@@ -622,7 +659,7 @@ function LineCodeEditor({
               return (
                 <div
                   key={ln}
-                  className={`h-5 w-full ${
+                  className={`h-[22px] w-full ${
                     isErr ? "bg-rose-500/18" : isExec ? "bg-sky-500/20" : ""
                   }`}
                 />
@@ -651,7 +688,7 @@ function LineCodeEditor({
               });
             }}
             placeholder={placeholder}
-            className="selectable relative z-10 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent px-2.5 py-2 leading-5 text-emerald-300 outline-none placeholder:text-slate-600 disabled:opacity-75"
+            className="selectable relative z-10 h-full w-full resize-none overflow-auto whitespace-pre bg-transparent px-3 py-2.5 leading-[22px] text-emerald-300 outline-none placeholder:text-slate-600 disabled:opacity-75"
           />
         </div>
       </div>
@@ -710,9 +747,9 @@ export function CodePanel() {
   };
 
   return (
-    <div className="space-y-3 text-xs">
+    <div className="flex min-h-full flex-col gap-4 text-xs">
       {/* 3-Mode Selector: Blocks | Script | G-code */}
-      <div className="grid grid-cols-3 rounded-xl border border-slate-200/90 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900">
+      <div className="grid shrink-0 grid-cols-3 rounded-xl border border-slate-200/80 bg-slate-200/60 p-1 dark:border-slate-800 dark:bg-slate-900">
         {(
           [
             { id: "BLOCKS", label: "Blocks", icon: Blocks },
@@ -724,10 +761,10 @@ export function CodePanel() {
             key={id}
             type="button"
             onClick={() => setMode(id)}
-            className={`inline-flex items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
               mode === id
                 ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
-                : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
             }`}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -737,9 +774,9 @@ export function CodePanel() {
       </div>
 
       {/* Run / Step / Stop / Export Bar */}
-      <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-2.5 dark:border-slate-800/90 dark:bg-slate-900/60">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="font-semibold text-slate-700 dark:text-slate-200">Runner</span>
+      <div className="shrink-0 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs dark:border-slate-800/90 dark:bg-slate-900/75">
+        <div className="mb-2.5 flex items-center justify-between">
+          <span className="font-semibold text-slate-900 dark:text-slate-100">Runner</span>
           <span
             className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${STATUS_BADGE[status] ?? STATUS_BADGE.IDLE}`}
           >
@@ -747,15 +784,15 @@ export function CodePanel() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={runOrPause}
-            className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold text-white shadow-xs transition ${
+            className={`inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white shadow-xs transition ${
               isRunning ? "bg-amber-500 hover:bg-amber-400" : "bg-sky-600 hover:bg-sky-500"
             }`}
           >
-            {isRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            {isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             <span>{isRunning ? "Pause" : "Run Code"}</span>
           </button>
 
@@ -764,9 +801,9 @@ export function CodePanel() {
             onClick={stepOnce}
             title="Execute next step"
             aria-label="Execute next step"
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
-            <SkipForward className="h-3.5 w-3.5" />
+            <SkipForward className="h-4 w-4" />
           </button>
 
           <button
@@ -775,9 +812,9 @@ export function CodePanel() {
             onClick={() => stop("Stopped program")}
             title="Stop execution"
             aria-label="Stop execution"
-            className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-35 dark:text-rose-400"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-35 dark:text-rose-400"
           >
-            <Square className="h-3.5 w-3.5" />
+            <Square className="h-4 w-4" />
           </button>
 
           <button
@@ -785,22 +822,22 @@ export function CodePanel() {
             onClick={handleExportGcode}
             title="Export as WLKATA .gcode file"
             aria-label="Export as G-code file"
-            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-4 w-4" />
           </button>
         </div>
 
         {/* Live Step Readout */}
         {activeStep && (
-          <div className="mt-2">
-            <div className="flex justify-between font-mono text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
+          <div className="mt-3">
+            <div className="flex justify-between gap-2 font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
               <span className="truncate">
                 Step {activeStepIndex + 1}/{compiledSteps.length}: {activeStep.label}
               </span>
-              <span>{Math.round(stepProgress * 100)}%</span>
+              <span className="shrink-0">{Math.round(stepProgress * 100)}%</span>
             </div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
               <div
                 className="h-full rounded-full bg-emerald-500 transition-all duration-75"
                 style={{ width: `${Math.min(100, Math.max(0, stepProgress * 100))}%` }}
@@ -812,9 +849,9 @@ export function CodePanel() {
 
       {/* Compile Errors */}
       {errors.length > 0 && (
-        <div className="space-y-1 rounded-xl border border-rose-500/35 bg-rose-500/10 p-2.5 text-[11px] text-rose-600 dark:text-rose-400">
+        <div className="shrink-0 space-y-1.5 rounded-xl border border-rose-500/35 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
           {errors.slice(0, 3).map((err, i) => (
-            <div key={i} className="flex items-start gap-1.5">
+            <div key={i} className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 <strong>Line {err.line}:</strong> {err.message}
@@ -826,28 +863,28 @@ export function CodePanel() {
 
       {/* === MODE 1: VISUAL BLOCKS === */}
       {mode === "BLOCKS" && (
-        <div className="space-y-2.5">
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+        <div className="space-y-4">
+          <section className="space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <span>Add Block</span>
               <button
                 type="button"
                 disabled={isLocked}
                 onClick={loadSampleBlocks}
-                className="inline-flex items-center gap-1 text-sky-600 hover:underline disabled:opacity-40 dark:text-sky-400"
+                className="inline-flex items-center gap-1 normal-case tracking-normal text-sky-600 hover:underline disabled:opacity-40 dark:text-sky-400"
               >
-                <Sparkles className="h-3 w-3" />
+                <Sparkles className="h-3.5 w-3.5" />
                 Load Demo
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 disabled={isLocked}
                 onClick={() => addBlock({ id: nextBlockId(), kind: "HOME" })}
                 className={PALETTE_BTN}
               >
-                <Home className="h-3 w-3 text-sky-500" />
+                <Home className="h-3.5 w-3.5 text-sky-500" />
                 Home
               </button>
               <button
@@ -856,7 +893,7 @@ export function CodePanel() {
                 onClick={() => insertCurrentPose("JOINT")}
                 className={PALETTE_BTN}
               >
-                <Sliders className="h-3 w-3 text-blue-500" />
+                <Sliders className="h-3.5 w-3.5 text-blue-500" />
                 MoveJ
               </button>
               <button
@@ -865,7 +902,7 @@ export function CodePanel() {
                 onClick={() => insertCurrentPose("LINEAR")}
                 className={PALETTE_BTN}
               >
-                <Move className="h-3 w-3 text-emerald-500" />
+                <Move className="h-3.5 w-3.5 text-emerald-500" />
                 MoveL
               </button>
               <button
@@ -874,7 +911,7 @@ export function CodePanel() {
                 onClick={() => addBlock({ id: nextBlockId(), kind: "WAIT", seconds: 0.5 })}
                 className={PALETTE_BTN}
               >
-                <Clock className="h-3 w-3 text-amber-500" />
+                <Clock className="h-3.5 w-3.5 text-amber-500" />
                 Wait
               </button>
               <button
@@ -885,7 +922,7 @@ export function CodePanel() {
                 }
                 className={PALETTE_BTN}
               >
-                <Grip className="h-3 w-3 text-orange-500" />
+                <Grip className="h-3.5 w-3.5 text-orange-500" />
                 Gripper
               </button>
               <button
@@ -896,7 +933,7 @@ export function CodePanel() {
                 }
                 className={PALETTE_BTN}
               >
-                <MoveHorizontal className="h-3 w-3 text-teal-500" />
+                <MoveHorizontal className="h-3.5 w-3.5 text-teal-500" />
                 Conveyor
               </button>
               <button
@@ -912,7 +949,7 @@ export function CodePanel() {
                 }
                 className={PALETTE_BTN}
               >
-                <ScanLine className="h-3 w-3 text-cyan-500" />
+                <ScanLine className="h-3.5 w-3.5 text-cyan-500" />
                 Sensor
               </button>
               <button
@@ -927,7 +964,7 @@ export function CodePanel() {
                 }
                 className={PALETTE_BTN}
               >
-                <Wrench className="h-3 w-3 text-rose-500" />
+                <Wrench className="h-3.5 w-3.5 text-rose-500" />
                 Tool
               </button>
               <button
@@ -938,75 +975,80 @@ export function CodePanel() {
                 }
                 className={PALETTE_BTN}
               >
-                <Repeat className="h-3 w-3 text-purple-500" />
+                <Repeat className="h-3.5 w-3.5 text-purple-500" />
                 Repeat
               </button>
             </div>
-          </div>
+          </section>
 
           {/* Convert Actions */}
-          <div className="flex gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               disabled={blocks.length === 0}
               onClick={convertBlocksToScript}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200/90 bg-slate-50 py-1.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="inline-flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-medium text-slate-600 shadow-2xs transition hover:border-sky-400/70 hover:text-sky-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-sky-400"
             >
               <span>To Script</span>
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               disabled={blocks.length === 0}
               onClick={convertBlocksToGcode}
-              className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200/90 bg-slate-50 py-1.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="inline-flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-medium text-slate-600 shadow-2xs transition hover:border-sky-400/70 hover:text-sky-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-sky-400"
             >
               <span>To G-code</span>
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {/* Block Stack */}
-          {blocks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-center text-xs text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/40 dark:text-slate-400">
-              No blocks yet. Pick a block above or click <strong>Load Demo</strong>.
+          <section className="space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Program Blocks ({blocks.length})
             </div>
-          ) : (
-            <div className="space-y-1.5">
-              {blocks.map((blk, idx) => (
-                <BlockCard
-                  key={blk.id}
-                  block={blk}
-                  index={idx}
-                  isActive={activeBlockId === blk.id}
-                  isLocked={isLocked}
-                  activeBlockId={activeBlockId}
-                  onDragStart={() => setDragIdx(idx)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragIdx !== null && dragIdx !== idx) moveBlock(dragIdx, idx);
-                    setDragIdx(null);
-                  }}
-                />
-              ))}
-            </div>
-          )}
+            {blocks.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-5 text-center text-xs text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/40 dark:text-slate-400">
+                No blocks yet. Pick a block above or click <strong>Load Demo</strong>.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {blocks.map((blk, idx) => (
+                  <BlockCard
+                    key={blk.id}
+                    block={blk}
+                    index={idx}
+                    isActive={activeBlockId === blk.id}
+                    isLocked={isLocked}
+                    activeBlockId={activeBlockId}
+                    onDragStart={() => setDragIdx(idx)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragIdx !== null && dragIdx !== idx) moveBlock(dragIdx, idx);
+                      setDragIdx(null);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       )}
 
       {/* === MODE 2: EASY SCRIPT === */}
       {mode === "SCRIPT" && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("JOINT")}
                 title="Insert moveJ() with current robot joint angles"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
               >
-                <Plus className="h-3 w-3 text-blue-500" />
+                <Plus className="h-3.5 w-3.5 text-blue-500" />
                 moveJ
               </button>
               <button
@@ -1014,9 +1056,9 @@ export function CodePanel() {
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("LINEAR")}
                 title="Insert moveL() with current robot TCP pose"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
               >
-                <Plus className="h-3 w-3 text-emerald-500" />
+                <Plus className="h-3.5 w-3.5 text-emerald-500" />
                 moveL
               </button>
             </div>
@@ -1029,10 +1071,10 @@ export function CodePanel() {
                 if (sample) setScriptText(sample.code);
                 e.target.value = "";
               }}
-              className="max-w-36 truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              className="h-8 min-w-[148px] max-w-[200px] truncate rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs outline-none focus:border-sky-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
             >
               <option value="" disabled>
-                Samples…
+                Load sample…
               </option>
               {Object.entries(SAMPLE_SCRIPTS).map(([k, s]) => (
                 <option key={k} value={k}>
@@ -1052,26 +1094,26 @@ export function CodePanel() {
             placeholder={`# Write Easy Script:\nhome()\nmoveJ(30, 15, -20, 0, -10, 0)\ngripper("close")\nwait(0.5)`}
           />
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex shrink-0 items-center justify-between gap-2">
             <button
               type="button"
               onClick={() => setShowHelp((v) => !v)}
-              className="text-[11px] font-medium text-slate-500 transition hover:text-sky-600 dark:hover:text-sky-400"
+              className="text-xs font-medium text-slate-500 transition hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400"
             >
               {showHelp ? "Hide syntax" : "Syntax reference"}
             </button>
             <button
               type="button"
               onClick={convertScriptToGcode}
-              className="inline-flex items-center gap-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-500/35 bg-sky-500/10 px-3 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
             >
               <span>Convert → G-code</span>
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {showHelp && (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50 p-2.5 font-mono text-[10px] leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-400">
+            <div className="shrink-0 space-y-1 rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/75 dark:text-slate-400">
               <div>home() · wait(0.5) · log(&quot;text&quot;)</div>
               <div>moveJ(j1..j6, speed=50) · moveL(x..rz, speed=80)</div>
               <div>gripper(&quot;open&quot;|&quot;close&quot;) · grab() · release()</div>
@@ -1085,17 +1127,43 @@ export function CodePanel() {
 
       {/* === MODE 3: WLKATA G-CODE === */}
       {mode === "GCODE" && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          {/* Cleanly separated insert pills and sample loader so nothing overflows */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Insert Command
+              </span>
+              <select
+                aria-label="Load sample G-code"
+                defaultValue=""
+                onChange={(e) => {
+                  const sample = SAMPLE_GCODE_PROGRAMS[e.target.value];
+                  if (sample) setGcodeText(sample.code);
+                  e.target.value = "";
+                }}
+                className="h-8 min-w-[148px] max-w-[200px] truncate rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs outline-none focus:border-sky-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="" disabled>
+                  Load sample…
+                </option>
+                {Object.entries(SAMPLE_GCODE_PROGRAMS).map(([k, s]) => (
+                  <option key={k} value={k}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("JOINT")}
                 title="Insert M21 Joint move with current angles"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
               >
-                <Plus className="h-3 w-3 text-blue-500" />
+                <Plus className="h-3.5 w-3.5 text-blue-500" />
                 M21
               </button>
               <button
@@ -1103,9 +1171,9 @@ export function CodePanel() {
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("LINEAR")}
                 title="Insert M20 Linear move with current TCP pose"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
               >
-                <Plus className="h-3 w-3 text-emerald-500" />
+                <Plus className="h-3.5 w-3.5 text-emerald-500" />
                 M20
               </button>
               <button
@@ -1113,7 +1181,7 @@ export function CodePanel() {
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "G4 P0.5"))}
                 title="Append 0.5s dwell (G4 P0.5)"
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-amber-400 hover:text-amber-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-amber-400"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-amber-400 hover:text-amber-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-amber-400"
               >
                 G4
               </button>
@@ -1122,7 +1190,7 @@ export function CodePanel() {
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "M3 S1000"))}
                 title="Append Gripper Close / Pump ON (M3 S1000)"
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-orange-400 hover:text-orange-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-orange-400"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-orange-400 hover:text-orange-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-orange-400"
               >
                 M3
               </button>
@@ -1131,31 +1199,11 @@ export function CodePanel() {
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "M5"))}
                 title="Append Gripper Open / Pump OFF (M5)"
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-400 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-slate-400 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
               >
                 M5
               </button>
             </div>
-
-            <select
-              aria-label="Load sample G-code"
-              defaultValue=""
-              onChange={(e) => {
-                const sample = SAMPLE_GCODE_PROGRAMS[e.target.value];
-                if (sample) setGcodeText(sample.code);
-                e.target.value = "";
-              }}
-              className="max-w-32 truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-            >
-              <option value="" disabled>
-                Samples…
-              </option>
-              {Object.entries(SAMPLE_GCODE_PROGRAMS).map(([k, s]) => (
-                <option key={k} value={k}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <LineCodeEditor
@@ -1167,7 +1215,7 @@ export function CodePanel() {
             placeholder="; WLKATA Mirobot G-code&#10;M21 G90 X0 Y0 Z0 A0 B0 C0 F2700"
           />
 
-          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+          <p className="shrink-0 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             Supports <code>M21</code>, <code>M20 G0/G1</code>, <code>G90/G91</code>,{" "}
             <code>G4 P</code>, <code>M3/M5</code>, <code>$H/G28</code>.
           </p>

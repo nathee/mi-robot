@@ -121,11 +121,11 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
         </div>
 
         {/* Mode Tabs */}
-        <div className="grid grid-cols-3 gap-1 border-b border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-950/50">
+        <div className="grid grid-cols-3 gap-1.5 border-b border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-800 dark:bg-slate-950/50">
           <button
             type="button"
             onClick={() => setTab("serial")}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
               tab === "serial"
                 ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
                 : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -137,7 +137,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
           <button
             type="button"
             onClick={() => setTab("wifi")}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
               tab === "wifi"
                 ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
                 : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -149,7 +149,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
           <button
             type="button"
             onClick={() => setTab("esp32")}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition ${
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
               tab === "esp32"
                 ? "bg-white text-sky-600 shadow-xs dark:bg-slate-800 dark:text-sky-400"
                 : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -202,13 +202,13 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
           {tab === "serial" && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <label className="space-y-1">
+                <label className="flex flex-col gap-1.5">
                   <span className="font-medium text-slate-600 dark:text-slate-300">Baud Rate</span>
                   <select
                     disabled={connected}
                     value={baudRate}
                     onChange={(e) => setBaudRate(Number(e.target.value))}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
                   >
                     {BAUD_RATES.map((b) => (
                       <option key={b} value={b}>
@@ -218,14 +218,14 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                   </select>
                 </label>
 
-                <label className="space-y-1">
+                <label className="flex flex-col gap-1.5">
                   <span className="font-medium text-slate-600 dark:text-slate-300">
                     RS485 Address
                   </span>
                   <select
                     value={addressFilter}
                     onChange={(e) => setAddressFilter(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
                   >
                     <option value="ANY">Any address</option>
                     {Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(2, "0")).map(
@@ -238,14 +238,14 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                   </select>
                 </label>
 
-                <label className="space-y-1">
+                <label className="flex flex-col gap-1.5">
                   <span className="font-medium text-slate-600 dark:text-slate-300">
                     Motion Style
                   </span>
                   <select
                     value={motionMode}
                     onChange={(e) => setMotionMode(e.target.value as HardwareMotionMode)}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
                   >
                     <option value="SMOOTH">Smooth (G-code)</option>
                     <option value="INSTANT">Instant (Joystick)</option>

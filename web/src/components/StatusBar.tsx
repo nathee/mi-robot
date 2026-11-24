@@ -32,7 +32,7 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="flex h-7 shrink-0 items-center justify-between gap-3 border-t border-slate-200/90 bg-white px-3 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-400">
+    <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-slate-200/90 bg-white px-4 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-900/95 dark:text-slate-400">
       <div className="hidden items-center gap-2 truncate sm:flex">
         <span className="inline-flex items-center gap-1">
           <kbd className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">

@@ -437,7 +437,7 @@ function HistoryModalInner({
               return (
                 <div
                   key={entry.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-3 transition hover:border-sky-400/60 dark:border-slate-800 dark:bg-slate-950/60"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-3.5 transition hover:border-sky-400/60 dark:border-slate-800 dark:bg-slate-950/60"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

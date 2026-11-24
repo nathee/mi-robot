@@ -28,9 +28,9 @@ export function SimulatorShell() {
   const mainRowRef = useRef<HTMLDivElement | null>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidthPx, setSidebarWidthPx] = useState(348);
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(408);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
-  const [consoleHeightPx, setConsoleHeightPx] = useState(170);
+  const [consoleHeightPx, setConsoleHeightPx] = useState(190);
   const [draggingSplit, setDraggingSplit] = useState<"sidebar" | "console" | null>(null);
 
   // Modal states
@@ -183,11 +183,11 @@ export function SimulatorShell() {
       if (draggingSplit === "sidebar" && mainRowRef.current) {
         const rect = mainRowRef.current.getBoundingClientRect();
         const rightWidth = rect.right - e.clientX;
-        setSidebarWidthPx(Math.min(500, Math.max(300, Math.round(rightWidth))));
+        setSidebarWidthPx(Math.min(620, Math.max(340, Math.round(rightWidth))));
       } else if (draggingSplit === "console" && workspaceRef.current) {
         const rect = workspaceRef.current.getBoundingClientRect();
         const h = rect.bottom - e.clientY;
-        setConsoleHeightPx(Math.min(360, Math.max(100, Math.round(h))));
+        setConsoleHeightPx(Math.min(400, Math.max(120, Math.round(h))));
       }
     };
 
@@ -301,10 +301,10 @@ export function SimulatorShell() {
                 tabIndex={0}
                 onPointerDown={() => setDraggingSplit("sidebar")}
                 onKeyDown={(e) => {
-                  if (e.key === "ArrowLeft") setSidebarWidthPx((w) => Math.min(500, w + 16));
-                  if (e.key === "ArrowRight") setSidebarWidthPx((w) => Math.max(300, w - 16));
+                  if (e.key === "ArrowLeft") setSidebarWidthPx((w) => Math.min(620, w + 16));
+                  if (e.key === "ArrowRight") setSidebarWidthPx((w) => Math.max(340, w - 16));
                 }}
-                className={`hidden w-1 shrink-0 cursor-col-resize bg-slate-200/90 transition hover:bg-sky-500/70 md:block dark:bg-slate-800 ${
+                className={`hidden w-1.5 shrink-0 cursor-col-resize bg-slate-200/80 transition hover:bg-sky-500/70 md:block dark:bg-slate-800/90 ${
                   draggingSplit === "sidebar" ? "bg-sky-500" : ""
                 }`}
               />
@@ -312,7 +312,7 @@ export function SimulatorShell() {
               {/* Single Mounted Right Control Sidebar */}
               <div
                 style={{ "--sidebar-w": `${sidebarWidthPx}px` } as CSSProperties}
-                className="h-72 w-full shrink-0 overflow-hidden md:h-full md:w-[var(--sidebar-w)]"
+                className="h-80 w-full shrink-0 overflow-hidden md:h-full md:w-[var(--sidebar-w)]"
               >
                 <ControlSidebar
                   onRequestRenameTarget={(index, name) =>
@@ -345,7 +345,7 @@ export function SimulatorShell() {
 
         {/* Collapsible Bottom Console */}
         <div
-          style={{ height: consoleExpanded ? `${consoleHeightPx}px` : "36px" }}
+          style={{ height: consoleExpanded ? `${consoleHeightPx}px` : "40px" }}
           className={`shrink-0 overflow-hidden ${
             draggingSplit === "console" ? "" : "transition-[height] duration-150"
           }`}
