@@ -280,8 +280,13 @@ export function stepsToGcode(
         if (tool && tool !== "NONE") lines.push(toolCodeFor(tool, step.state));
         else lines.push(step.state === "CLOSE" ? `M3 S${step.pwm || 1000}` : "M5");
         break;
+      case "WAIT_SENSOR":
+        lines.push(`; wait for light sensor ${step.until === "CLEAR" ? "clear" : "box"} (simulator / PLC logic)`);
+        break;
       case "CONVEYOR":
-        if (step.mode === "SPEED") {
+        if (step.mode === "AUTO") {
+          lines.push(`; conveyor auto-feed ${step.value > 0 ? `ON ${step.value}% (stop at light sensor)` : "OFF"}`);
+        } else if (step.mode === "SPEED") {
           lines.push(`G6 F${Math.round(step.value)}`);
         } else {
           lines.push(`${step.absolute ? "G90" : "G91"} G01 D${Number(step.value.toFixed(2))}${step.feed ? ` F${step.feed}` : ""}`);

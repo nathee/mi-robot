@@ -66,3 +66,54 @@ describe("workcell layout editing", () => {
     expect(reachStatus(20, 20)).toBe("TOO_CLOSE");
   });
 });
+
+import {
+  autoFeedSpeedMmS,
+  DEFAULT_SENSOR,
+  isSensorBlocked,
+  stepConveyor,
+  defaultConveyorRuntime,
+} from "@/lib/sim/workcell";
+import { formatSensorLine, parseIncomingHardwareLine } from "@/lib/hardware/protocol";
+
+describe("light sensor", () => {
+  const atStop = makeBox({ id: "a", x: min + 12.5, y: cross, z: conveyor.topZ + 12.5 });
+  const far = makeBox({ id: "b", x: min + 120, y: cross, z: conveyor.topZ + 12.5 });
+
+  it("detects a box at the end stop, ignores boxes upstream and lifted boxes", () => {
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [atStop])).toBe(true);
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [far])).toBe(false);
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...atStop, held: true }])).toBe(false);
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...atStop, z: atStop.z + 30 }])).toBe(false);
+  });
+
+  it("auto feed runs while clear and stops when blocked", () => {
+    const auto = { enabled: true, speedPercent: 60 };
+    expect(autoFeedSpeedMmS(auto, false)).toBeCloseTo(-30, 6);
+    expect(autoFeedSpeedMmS(auto, true)).toBe(0);
+    expect(autoFeedSpeedMmS({ ...auto, enabled: false }, false)).toBe(0);
+  });
+
+  it("a fed box breaks the beam close to the end stop", () => {
+    let boxes = [far];
+    let rt = defaultConveyorRuntime();
+    const auto = { enabled: true, speedPercent: 60 };
+    for (let i = 0; i < 400; i++) {
+      rt = { ...rt, speedMmS: autoFeedSpeedMmS(auto, isSensorBlocked(conveyor, DEFAULT_SENSOR, boxes)) };
+      const res = stepConveyor(conveyor, rt, boxes, 16);
+      rt = res.runtime;
+      boxes = res.boxes;
+    }
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, boxes)).toBe(true);
+    expect(boxes[0].x - (min + 12.5)).toBeLessThan(3);
+  });
+
+  it("RS-485: SENSOR? query, AUTO command and reply format", () => {
+    const opts = { currentJoints: [0, 0, 0, 0, 0, 0] };
+    expect(parseIncomingHardwareLine("@01SENSOR?", opts).kind).toBe("SENSOR_QUERY");
+    expect(parseIncomingHardwareLine("@01AUTO=1,60", opts)).toMatchObject({ kind: "AUTO_FEED", enabled: true, speedPercent: 60 });
+    expect(parseIncomingHardwareLine("@01AUTO=0", opts)).toMatchObject({ kind: "AUTO_FEED", enabled: false });
+    expect(parseIncomingHardwareLine("@01?", opts).kind).toBe("STATUS_QUERY");
+    expect(formatSensorLine(true)).toBe("SENSOR=1");
+  });
+});

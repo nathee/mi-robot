@@ -23,6 +23,7 @@ import {
   Square,
   Trash2,
   MoveHorizontal,
+  ScanLine,
   Wrench,
 } from "lucide-react";
 import { nextBlockId } from "@/lib/program/blocks";
@@ -112,6 +113,8 @@ function BlockCard({
                 ? "border-l-teal-500"
                 : block.kind === "TOOL"
                   ? "border-l-rose-500"
+                  : block.kind === "WAIT_SENSOR"
+                    ? "border-l-cyan-500"
                   : "border-l-purple-500";
 
   return (
@@ -145,6 +148,8 @@ function BlockCard({
                         ? "Conveyor"
                         : block.kind === "TOOL"
                           ? "Change Tool"
+                          : block.kind === "WAIT_SENSOR"
+                            ? "Wait Light Sensor"
                           : "Repeat Loop"}
           </span>
         </div>
@@ -339,7 +344,11 @@ function BlockCard({
             onChange={(e) =>
               updateBlock(block.id, (b) =>
                 b.kind === "CONVEYOR"
-                  ? { ...b, mode: e.target.value as "MOVE" | "SPEED", value: e.target.value === "SPEED" ? -60 : -50 }
+                  ? {
+                      ...b,
+                      mode: e.target.value as "MOVE" | "SPEED" | "AUTO",
+                      value: e.target.value === "SPEED" ? -60 : e.target.value === "AUTO" ? 60 : -50,
+                    }
                   : b
               )
             }
@@ -347,20 +356,54 @@ function BlockCard({
           >
             <option value="MOVE">Move by (D)</option>
             <option value="SPEED">Speed % (G6 F)</option>
+            <option value="AUTO">Auto-feed % (0 = off)</option>
           </select>
           <input
             type="number"
             disabled={isLocked}
-            step={block.mode === "SPEED" ? 5 : 10}
-            min={block.mode === "SPEED" ? -100 : -5000}
-            max={block.mode === "SPEED" ? 100 : 5000}
+            step={block.mode === "MOVE" ? 10 : 5}
+            min={block.mode === "SPEED" ? -100 : block.mode === "AUTO" ? 0 : -5000}
+            max={block.mode === "MOVE" ? 5000 : 100}
             value={block.value}
             onChange={(e) =>
               updateBlock(block.id, (b) => (b.kind === "CONVEYOR" ? { ...b, value: Number(e.target.value) || 0 } : b))
             }
             className="w-20 rounded border border-slate-200 bg-white px-1 py-0.5 font-mono dark:border-slate-700 dark:bg-slate-950"
           />
-          <span>{block.mode === "SPEED" ? "%" : "mm"}</span>
+          <span>{block.mode === "MOVE" ? "mm" : "%"}</span>
+        </div>
+      )}
+
+      {block.kind === "WAIT_SENSOR" && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+          <select
+            disabled={isLocked}
+            value={block.until}
+            onChange={(e) =>
+              updateBlock(block.id, (b) =>
+                b.kind === "WAIT_SENSOR" ? { ...b, until: e.target.value as "BLOCKED" | "CLEAR" } : b
+              )
+            }
+            className="rounded border border-slate-200 bg-white px-1 py-0.5 dark:border-slate-700 dark:bg-slate-950"
+          >
+            <option value="BLOCKED">until a box arrives</option>
+            <option value="CLEAR">until the beam is clear</option>
+          </select>
+          <span>timeout</span>
+          <input
+            type="number"
+            disabled={isLocked}
+            min={1}
+            max={300}
+            value={block.timeoutSec}
+            onChange={(e) =>
+              updateBlock(block.id, (b) =>
+                b.kind === "WAIT_SENSOR" ? { ...b, timeoutSec: Number(e.target.value) || 30 } : b
+              )
+            }
+            className="w-14 rounded border border-slate-200 bg-white px-1 py-0.5 font-mono dark:border-slate-700 dark:bg-slate-950"
+          />
+          <span>s</span>
         </div>
       )}
 
@@ -772,6 +815,17 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() =>
+                  addBlock({ id: nextBlockId(), kind: "WAIT_SENSOR", until: "BLOCKED", timeoutSec: 30 })
+                }
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 py-1.5 text-[11px] font-semibold text-cyan-700 hover:bg-cyan-500/20 disabled:opacity-40 dark:text-cyan-300"
+              >
+                <ScanLine className="h-3 w-3" />
+                Sensor
+              </button>
+              <button
+                type="button"
+                disabled={isLocked}
+                onClick={() =>
                   addBlock({ id: nextBlockId(), kind: "TOOL", tool: useRobotStore.getState().toolType })
                 }
                 className="inline-flex items-center justify-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-500/20 disabled:opacity-40 dark:text-rose-300"
@@ -916,6 +970,8 @@ export function CodePanel() {
               <div>gripper(&quot;open&quot; | &quot;close&quot;) · suction(&quot;on&quot; | &quot;off&quot;) · grab() · release()</div>
               <div>tool(&quot;SUCTION&quot; | &quot;TWO_FINGER&quot; | &quot;THREE_FINGER_SOFT&quot; | &quot;MICRO_SERVO&quot;)</div>
               <div>conveyor(-50) · conveyorTo(0) · conveyorSpeed(-60)</div>
+              <div>conveyorAuto(&quot;on&quot;, speed=60) · conveyorAuto(&quot;off&quot;)</div>
+              <div>waitSensor() · waitSensor(&quot;clear&quot;) · waitSensor(timeout=20)</div>
               <div>wait(0.5) · log(&quot;text&quot;)</div>
               <div>repeat 3: ... end</div>
             </div>

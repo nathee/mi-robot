@@ -12,7 +12,13 @@ import {
   SRGBColorSpace,
   type Texture,
 } from "three";
-import { conveyorExtent, type ConveyorConfig, type Platform, type WorkBox } from "@/lib/sim/workcell";
+import {
+  conveyorExtent,
+  type ConveyorConfig,
+  type LightSensorConfig,
+  type Platform,
+  type WorkBox,
+} from "@/lib/sim/workcell";
 import { disposeObjectTree } from "./stlLoader";
 
 const MM = 0.001;
@@ -23,6 +29,8 @@ interface WorkcellRenderState {
   platforms: readonly Platform[];
   conveyor: ConveyorConfig;
   conveyorPositionMm: number;
+  sensor: LightSensorConfig;
+  sensorBlocked: boolean;
 }
 
 function beltTexture(): Texture | null {
@@ -55,6 +63,8 @@ export class WorkcellView {
   private beltTex: Texture | null = null;
   private rollers: Mesh[] = [];
   private staticKey = "";
+  private beamMat: MeshStandardMaterial | null = null;
+  private sensorLedMat: MeshStandardMaterial | null = null;
 
   constructor() {
     this.group.name = "workcell";
@@ -62,16 +72,22 @@ export class WorkcellView {
   }
 
   sync(state: WorkcellRenderState): void {
-    const key = JSON.stringify([state.platforms, state.conveyor]);
+    const key = JSON.stringify([state.platforms, state.conveyor, state.sensor]);
     if (key !== this.staticKey) {
       this.staticKey = key;
-      this.buildStatic(state.platforms, state.conveyor);
+      this.buildStatic(state.platforms, state.conveyor, state.sensor);
+    }
+    const hex = state.sensorBlocked ? 0xef4444 : 0x22c55e;
+    for (const m of [this.beamMat, this.sensorLedMat]) {
+      if (!m) continue;
+      m.color.setHex(hex);
+      m.emissive.setHex(hex);
     }
     this.syncBelt(state.conveyor, state.conveyorPositionMm);
     this.syncBoxes(state.boxes);
   }
 
-  private buildStatic(platforms: readonly Platform[], c: ConveyorConfig): void {
+  private buildStatic(platforms: readonly Platform[], c: ConveyorConfig, sensor: LightSensorConfig): void {
     disposeObjectTree(this.staticGroup);
     this.staticGroup.clear();
     this.rollers = [];
@@ -133,6 +149,36 @@ export class WorkcellView {
     const { min } = conveyorExtent(c);
     stop.position.set((min - (c.axis === "x" ? c.x : c.y) - 1.5) * MM, 0, (c.topZ + 8) * MM);
     conv.add(stop);
+
+    // Light sensor: emitter + receiver posts on both sides of the belt with a beam across
+    const sensorGrp = new Group();
+    sensorGrp.name = "lightSensor";
+    sensorGrp.position.x = (min - (c.axis === "x" ? c.x : c.y) + sensor.offsetMm) * MM;
+    const beamZ = c.topZ + 10;
+    const postMat = new MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+    this.sensorLedMat = new MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 0.8 });
+    this.beamMat = new MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x22c55e,
+      emissiveIntensity: 0.9,
+      transparent: true,
+      opacity: 0.75,
+    });
+    for (const side of [-1, 1]) {
+      const post = new Mesh(new BoxGeometry(8 * MM, 8 * MM, 26 * MM), postMat);
+      post.position.set(0, side * (w / 2 + 9) * MM, (c.topZ + 6) * MM);
+      sensorGrp.add(post);
+      const head = new Mesh(new BoxGeometry(10 * MM, 10 * MM, 10 * MM), postMat);
+      head.position.set(0, side * (w / 2 + 9) * MM, beamZ * MM);
+      sensorGrp.add(head);
+      const led = new Mesh(new BoxGeometry(3 * MM, 3 * MM, 3 * MM), this.sensorLedMat);
+      led.position.set(0, side * (w / 2 + 9) * MM, (beamZ + 6.5) * MM);
+      sensorGrp.add(led);
+    }
+    const beam = new Mesh(new CylinderGeometry(0.9 * MM, 0.9 * MM, (w + 8) * MM, 8), this.beamMat);
+    beam.position.z = beamZ * MM; // CylinderGeometry runs along Y = across the belt
+    sensorGrp.add(beam);
+    conv.add(sensorGrp);
 
     this.staticGroup.add(conv);
   }

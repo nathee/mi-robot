@@ -609,6 +609,8 @@ export class MirobotSceneEngine {
       platforms: wc.platforms,
       conveyor: wc.conveyor,
       conveyorPositionMm: wc.conveyorRuntime.positionMm,
+      sensor: wc.sensor,
+      sensorBlocked: wc.sensorBlocked,
     });
 
     if (tcp) {

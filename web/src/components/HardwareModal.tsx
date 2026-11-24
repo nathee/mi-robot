@@ -52,6 +52,8 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
   const setAddressFilter = useHardwareStore((s) => s.setAddressFilter);
   const setMotionMode = useHardwareStore((s) => s.setMotionMode);
   const setAutoReply = useHardwareStore((s) => s.setAutoReply);
+  const reportSensor = useHardwareStore((s) => s.reportSensor);
+  const setReportSensor = useHardwareStore((s) => s.setReportSensor);
   const connectSerial = useHardwareStore((s) => s.connectSerial);
   const connectWebSocket = useHardwareStore((s) => s.connectWebSocket);
   const disconnect = useHardwareStore((s) => s.disconnect);
@@ -250,6 +252,19 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 <span>
                   Auto-reply <code>ok</code> &amp; WLKATA <code>&lt;Idle,...&gt;</code> status back
                   over RS485 (behaves like real Mirobot)
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={reportSensor}
+                  onChange={(e) => setReportSensor(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded accent-sky-500"
+                />
+                <span>
+                  Send conveyor light sensor <code>SENSOR=1</code> / <code>SENSOR=0</code> when it changes
+                  (query anytime with <code>@01SENSOR?</code>; auto-feed: <code>@01AUTO=1,60</code> / <code>@01AUTO=0</code>)
                 </span>
               </label>
 

@@ -59,11 +59,29 @@ export interface ConveyorRuntime {
   moveSpeedMmS: number;
 }
 
+/**
+ * Photoelectric (light) sensor across the belt. The beam sits offsetMm upstream of the end stop;
+ * it is "blocked" while a box on the belt crosses the beam.
+ */
+export interface LightSensorConfig {
+  offsetMm: number;
+}
+
+/** Auto feed: the belt runs while the sensor is clear and stops when a box breaks the beam. */
+export interface AutoFeedConfig {
+  enabled: boolean;
+  /** Belt speed while feeding, percent of max (positive = toward the end stop). */
+  speedPercent: number;
+}
+
 export interface WorkcellSnapshot {
   boxes: WorkBox[];
   platforms: Platform[];
   conveyor: ConveyorConfig;
   conveyorRuntime: ConveyorRuntime;
+  /** Optional for snapshots saved before the sensor existed. */
+  sensor?: LightSensorConfig;
+  autoFeed?: AutoFeedConfig;
 }
 
 export interface TcpPoseMm {
@@ -94,6 +112,44 @@ export const DEFAULT_PLATFORMS: Platform[] = [
 ];
 
 export const PLATFORM_COLORS = ["#64748b", "#78716c", "#0f766e", "#7c3aed"];
+
+/** Beam 2 mm in front of the end stop: the belt stops with the box (almost) touching the stop. */
+export const DEFAULT_SENSOR: LightSensorConfig = { offsetMm: 2 };
+export const DEFAULT_AUTO_FEED: AutoFeedConfig = { enabled: false, speedPercent: 60 };
+
+export function normalizeSensor(s: Partial<LightSensorConfig> | undefined, c: ConveyorConfig): LightSensorConfig {
+  const v = Number(s?.offsetMm);
+  const offset = Number.isFinite(v) ? v : DEFAULT_SENSOR.offsetMm;
+  return { offsetMm: Math.max(0, Math.min(c.lengthMm, offset)) };
+}
+
+/** World position (mm) of the sensor beam centre line on the belt. */
+export function sensorBeamPoint(c: ConveyorConfig, sensor: LightSensorConfig): { x: number; y: number; z: number } {
+  const { min, cross } = conveyorExtent(c);
+  const a = min + sensor.offsetMm;
+  const z = c.topZ + 10;
+  return c.axis === "x" ? { x: a, y: cross, z } : { x: cross, y: a, z };
+}
+
+/** True when any box resting on the belt crosses the light beam. Held boxes are ignored (lifted away). */
+export function isSensorBlocked(
+  c: ConveyorConfig,
+  sensor: LightSensorConfig,
+  boxes: readonly WorkBox[]
+): boolean {
+  const beam = conveyorExtent(c).min + sensor.offsetMm;
+  return boxes.some((b) => isOnConveyor(c, b) && Math.abs(along(c, b) - beam) <= b.size / 2);
+}
+
+/**
+ * Belt speed (mm/s) for auto-feed: the belt moves boxes toward the end stop (negative direction)
+ * while the beam is clear, and stops as soon as a box breaks it.
+ */
+export function autoFeedSpeedMmS(auto: AutoFeedConfig, blocked: boolean): number {
+  if (!auto.enabled || blocked) return 0;
+  const p = Math.max(0, Math.min(100, auto.speedPercent));
+  return -(p / 100) * CONVEYOR_MAX_SPEED_MM_S;
+}
 
 export function defaultConveyorRuntime(): ConveyorRuntime {
   return { speedMmS: 0, positionMm: 0, targetMm: null, moveSpeedMmS: 30 };

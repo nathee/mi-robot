@@ -33,6 +33,10 @@ function run(steps: readonly ProgramStep[]) {
         robot.setToolType(step.tool, { log: false });
         break;
       case "CONVEYOR":
+        if (step.mode === "AUTO") {
+          wc.setAutoFeed(step.value > 0, step.value || undefined);
+          break;
+        }
         if (step.mode === "SPEED") wc.setConveyorSpeedPercent(step.value);
         else wc.moveConveyor(step.value, Boolean(step.absolute), step.feed);
         for (let i = 0; i < 200; i++) useWorkcellStore.getState().step(50);
@@ -40,6 +44,16 @@ function run(steps: readonly ProgramStep[]) {
       case "WAIT":
         for (let i = 0; i < step.durationMs / 50; i++) useWorkcellStore.getState().step(50);
         break;
+      case "WAIT_SENSOR": {
+        let t = 0;
+        const met = () => (useWorkcellStore.getState().sensorBlocked ? step.until === "BLOCKED" : step.until === "CLEAR");
+        while (!met() && t < step.timeoutMs) {
+          useWorkcellStore.getState().step(50);
+          t += 50;
+        }
+        expect(met(), `${step.label} timed out`).toBe(true);
+        break;
+      }
     }
     useWorkcellStore.getState().step(16);
   }
@@ -65,6 +79,18 @@ describe("workcell end-to-end", () => {
     expect(boxes).toHaveLength(3);
     expect(boxes.every(onTray)).toBe(true);
     boxes.forEach((b) => expect(b.z).toBeCloseTo(tray.topZ + b.size / 2, 3));
+  });
+
+  it("auto-feed + light sensor sample sorts all 3 boxes and notifies on each arrival", () => {
+    useWorkcellStore.getState().loadPreset("CONVEYOR");
+    const before = useWorkcellStore.getState().sensorCount;
+    const res = compileScriptProgram(SAMPLE_SCRIPTS.sensorFeed.code);
+    expect(res.errors).toEqual([]);
+    run(res.steps);
+    const s = useWorkcellStore.getState();
+    expect(s.boxes.every(onTray)).toBe(true);
+    expect(s.sensorCount - before).toBe(3);
+    expect(s.autoFeed.enabled).toBe(false);
   });
 
   it("soft gripper sample moves a tray box onto the conveyor", () => {

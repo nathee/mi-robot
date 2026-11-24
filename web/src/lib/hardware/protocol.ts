@@ -17,6 +17,8 @@ export type HardwareCommand =
   | { kind: "WAIT"; durationMs: number; raw: string }
   | { kind: "CONVEYOR_MOVE"; distanceMm: number; absolute: boolean; feed?: number; raw: string }
   | { kind: "CONVEYOR_SPEED"; percent: number; raw: string }
+  | { kind: "SENSOR_QUERY"; raw: string }
+  | { kind: "AUTO_FEED"; enabled: boolean; speedPercent?: number; raw: string }
   | { kind: "HOME"; axis?: number; raw: string }
   | { kind: "PAUSE"; raw: string }
   | { kind: "RESUME"; raw: string }
@@ -68,6 +70,11 @@ export function formatWlkataStatusReport(params: {
  * Formats the reply for RS485_Mirobot::getStatus() (`@01O103`).
  * Matches Mirobot.cpp lines 314 & 350-365 (`State:Idle`, `State:Homing`, `State:Run`, `State:Busy`).
  */
+/** Line pushed to the RS-485 master when the conveyor light sensor changes, and the `SENSOR?` reply. */
+export function formatSensorLine(blocked: boolean): string {
+  return `SENSOR=${blocked ? 1 : 0}`;
+}
+
 export function formatO103StatusReply(state: VirtualControllerState): string {
   if (state === "Home") return "State:Homing";
   if (state === "Hold") return "State:Busy";
@@ -112,6 +119,21 @@ export function parseIncomingHardwareLine(
     }
     line = addrMatch[2].trim();
     if (!line) return { kind: "IGNORED", reason: "Empty RS-485 payload", raw };
+  }
+
+  // Conveyor light sensor query (`@01SENSOR?` -> `SENSOR=1` / `SENSOR=0`)
+  if (/^SENSOR\s*\?$/i.test(line)) {
+    return { kind: "SENSOR_QUERY", raw };
+  }
+  // Conveyor auto-feed (`@01AUTO=1`, `@01AUTO=1,60`, `@01AUTO=0`)
+  const autoMatch = line.match(/^AUTO\s*=\s*([01])(?:\s*,\s*(\d{1,3}))?$/i);
+  if (autoMatch) {
+    return {
+      kind: "AUTO_FEED",
+      enabled: autoMatch[1] === "1",
+      speedPercent: autoMatch[2] ? Number(autoMatch[2]) : undefined,
+      raw,
+    };
   }
 
   // Real-time single-char / short control commands (from Mirobot.cpp & mirobot-rs485-control.ino)

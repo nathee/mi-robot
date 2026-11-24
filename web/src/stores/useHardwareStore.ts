@@ -6,6 +6,7 @@ import { pathTrajectorySample } from "@/lib/path/trajectory";
 import {
   formatO103StatusReply,
   formatWlkataStatusReport,
+  formatSensorLine,
   parseIncomingHardwareLine,
   type VirtualControllerState,
 } from "@/lib/hardware/protocol";
@@ -97,6 +98,8 @@ interface HardwareState {
   addressFilter: string;
   motionMode: HardwareMotionMode;
   autoReply: boolean;
+  /** Push `SENSOR=1/0` to the master whenever the conveyor light sensor changes. */
+  reportSensor: boolean;
   controllerState: VirtualControllerState;
   lastMotionSpace: "Angle" | "Cartesian";
   defaultFeed: number;
@@ -120,6 +123,7 @@ interface HardwareState {
   connectWebSocket: (url?: string) => void;
   disconnect: () => Promise<void>;
   sendRawLine: (line: string) => Promise<void>;
+  setReportSensor: (on: boolean) => void;
   handleIncomingLine: (line: string) => void;
   advanceHardwareMotion: (dtMs: number) => void;
 }
@@ -139,6 +143,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
   addressFilter: "01",
   motionMode: "SMOOTH",
   autoReply: true,
+  reportSensor: true,
   controllerState: "Idle",
   lastMotionSpace: "Angle",
   defaultFeed: 2000,
@@ -166,6 +171,9 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
   },
   setAutoReply(autoReply) {
     set({ autoReply });
+  },
+  setReportSensor(reportSensor) {
+    set({ reportSensor });
   },
 
   async sendRawLine(line) {
@@ -311,6 +319,18 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         dir: "sys",
         text: `[RS485] Conveyor ${cmd.absolute ? "move to" : "move by"} D${cmd.distanceMm} mm`,
       });
+      replyIfEnabled("ok");
+      return;
+    }
+
+    if (cmd.kind === "SENSOR_QUERY") {
+      // A query always gets an answer, even with auto-reply off
+      if (state.connected) void get().sendRawLine(formatSensorLine(useWorkcellStore.getState().sensorBlocked));
+      return;
+    }
+
+    if (cmd.kind === "AUTO_FEED") {
+      useWorkcellStore.getState().setAutoFeed(cmd.enabled, cmd.speedPercent);
       replyIfEnabled("ok");
       return;
     }
@@ -632,3 +652,10 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
     set({ connected: false, transport: "NONE", smoothTarget: null, controllerState: "Idle" });
   },
 }));
+
+// Push conveyor light-sensor changes to the RS-485 master (ESP32 / IDX-485).
+useWorkcellStore.subscribe((state, prev) => {
+  if (state.sensorBlocked === prev.sensorBlocked) return;
+  const hw = useHardwareStore.getState();
+  if (hw.connected && hw.reportSensor) void hw.sendRawLine(formatSensorLine(state.sensorBlocked));
+});

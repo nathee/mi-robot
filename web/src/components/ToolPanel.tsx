@@ -9,6 +9,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  ScanLine,
   SkipBack,
   SkipForward,
   Trash2,
@@ -109,6 +110,10 @@ export function ToolPanel() {
   const lastGraspMessage = useWorkcellStore((s) => s.lastGraspMessage);
   const conveyor = useWorkcellStore((s) => s.conveyor);
   const platforms = useWorkcellStore((s) => s.platforms);
+  const sensor = useWorkcellStore((s) => s.sensor);
+  const sensorBlocked = useWorkcellStore((s) => s.sensorBlocked);
+  const sensorCount = useWorkcellStore((s) => s.sensorCount);
+  const autoFeed = useWorkcellStore((s) => s.autoFeed);
   const wc = useWorkcellStore.getState;
 
   const def = TOOL_DEFS[toolType];
@@ -271,6 +276,54 @@ export function ToolPanel() {
         <p className="mt-1 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
           Negative = belt moves toward the robot (end stop). Commands: G6 F-100..100 (MS4220) or G91 G01 D±mm (7th axis).
         </p>
+      </Section>
+
+      <Section icon={<ScanLine className="h-3 w-3 text-sky-500" />} title="Light Sensor & Auto Feed">
+        <div className={CARD}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-100">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  sensorBlocked ? "bg-rose-500 shadow-[0_0_6px] shadow-rose-500" : "bg-emerald-500"
+                }`}
+              />
+              {sensorBlocked ? "Box detected" : "Clear"}
+            </span>
+            <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+              SENSOR={sensorBlocked ? 1 : 0} · count {sensorCount}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <NumField
+              label="Beam from end stop (mm)"
+              value={sensor.offsetMm}
+              step={5}
+              onChange={(v) => wc().setSensorOffset(v)}
+            />
+            <NumField
+              label="Auto-feed speed (%)"
+              value={autoFeed.speedPercent}
+              step={5}
+              min={5}
+              max={100}
+              onChange={(v) => wc().setAutoFeed(autoFeed.enabled, v)}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => wc().setAutoFeed(!autoFeed.enabled)}
+            className={`mt-2 w-full ${BTN} ${
+              autoFeed.enabled ? "border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300" : ""
+            }`}
+          >
+            {autoFeed.enabled ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+            {autoFeed.enabled ? "Auto feed ON: stops while a box blocks the beam" : "Start auto feed"}
+          </button>
+          <p className="mt-1.5 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+            The belt runs while the beam is clear and stops when a box arrives. It starts again once the box is
+            lifted. Changes are sent over RS-485 as <code>SENSOR=1</code> / <code>SENSOR=0</code>.
+          </p>
+        </div>
       </Section>
 
       <Section icon={<LayoutGrid className="h-3 w-3 text-sky-500" />} title="Layout (mm, robot base frame)">

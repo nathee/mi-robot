@@ -2,6 +2,13 @@ import { create } from "zustand";
 import { Quaternion, Vector3 } from "three";
 import { tcpMatrixFromJointsDeg } from "@/lib/kinematics/fk";
 import {
+  autoFeedSpeedMmS,
+  DEFAULT_AUTO_FEED,
+  DEFAULT_SENSOR,
+  isSensorBlocked,
+  normalizeSensor,
+  type AutoFeedConfig,
+  type LightSensorConfig,
   applyConveyorLayout,
   applyPlatformLayout,
   BOX_COLORS,
@@ -32,6 +39,12 @@ import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 
 interface WorkcellState extends WorkcellSnapshot {
+  sensor: LightSensorConfig;
+  autoFeed: AutoFeedConfig;
+  /** Live light-sensor state: true while a box on the belt breaks the beam. */
+  sensorBlocked: boolean;
+  /** Number of clear -> blocked transitions (boxes counted). */
+  sensorCount: number;
   preset: WorkcellPresetId;
   nextBoxNum: number;
   lastGraspMessage: string;
@@ -45,6 +58,8 @@ interface WorkcellState extends WorkcellSnapshot {
   addPlatform: () => void;
   removePlatform: (id: string) => void;
   resetLayout: () => void;
+  setSensorOffset: (offsetMm: number) => void;
+  setAutoFeed: (enabled: boolean, speedPercent?: number) => void;
   setConveyorSpeedPercent: (percent: number) => void;
   moveConveyor: (distanceMm: number, absolute: boolean, feed?: number) => void;
   stopConveyor: () => void;
@@ -72,13 +87,17 @@ const initial = buildPreset("CONVEYOR");
 
 export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   ...initial,
+  sensor: { ...DEFAULT_SENSOR },
+  autoFeed: { ...DEFAULT_AUTO_FEED },
+  sensorBlocked: false,
+  sensorCount: 0,
   preset: "CONVEYOR",
   nextBoxNum: initial.boxes.length + 1,
   lastGraspMessage: "",
 
   loadPreset(id) {
     const snap = buildPreset(id);
-    set({ ...snap, preset: id, nextBoxNum: snap.boxes.length + 1, lastGraspMessage: "" });
+    set({ ...snap, autoFeed: { ...get().autoFeed, enabled: false }, preset: id, nextBoxNum: snap.boxes.length + 1, lastGraspMessage: "" });
     log(`Workcell preset loaded: ${id}`);
   },
 
@@ -113,7 +132,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   updateConveyorLayout(partial) {
     const s = get();
     const res = applyConveyorLayout(s.conveyor, s.boxes, partial);
-    set({ conveyor: res.conveyor, boxes: res.boxes });
+    set({ conveyor: res.conveyor, boxes: res.boxes, sensor: normalizeSensor(s.sensor, res.conveyor) });
   },
 
   updatePlatform(id, partial) {
@@ -175,8 +194,28 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     set({ boxes: [] });
   },
 
+  setSensorOffset(offsetMm) {
+    set({ sensor: normalizeSensor({ offsetMm }, get().conveyor) });
+  },
+
+  setAutoFeed(enabled, speedPercent) {
+    const s = get();
+    const autoFeed = {
+      enabled,
+      speedPercent: Math.max(5, Math.min(100, speedPercent ?? s.autoFeed.speedPercent)),
+    };
+    set({
+      autoFeed,
+      conveyorRuntime: { ...s.conveyorRuntime, targetMm: null, speedMmS: enabled ? s.conveyorRuntime.speedMmS : 0 },
+    });
+    if (enabled !== s.autoFeed.enabled) {
+      log(enabled ? `Conveyor auto-feed ON (${autoFeed.speedPercent}%, stops at the light sensor)` : "Conveyor auto-feed OFF");
+    }
+  },
+
   setConveyorSpeedPercent(percent) {
     const p = Math.max(-100, Math.min(100, Number(percent) || 0));
+    if (get().autoFeed.enabled) get().setAutoFeed(false);
     set({
       conveyorRuntime: {
         ...get().conveyorRuntime,
@@ -187,6 +226,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   },
 
   moveConveyor(distanceMm, absolute, feed) {
+    if (get().autoFeed.enabled) get().setAutoFeed(false);
     const rt = get().conveyorRuntime;
     const target = absolute ? distanceMm : rt.positionMm + distanceMm;
     const moveSpeed =
@@ -204,6 +244,15 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     let runtime = s.conveyorRuntime;
     let changed = false;
 
+    // Auto-feed: run the belt while the beam is clear, stop when a box breaks it
+    if (s.autoFeed.enabled && runtime.targetMm === null) {
+      const want = autoFeedSpeedMmS(s.autoFeed, isSensorBlocked(s.conveyor, s.sensor, boxes));
+      if (want !== runtime.speedMmS) {
+        runtime = { ...runtime, speedMmS: want };
+        changed = true;
+      }
+    }
+
     if (conveyorVelocity(runtime) !== 0) {
       const res = stepConveyor(s.conveyor, runtime, boxes, dtMs);
       runtime = res.runtime;
@@ -213,6 +262,11 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     if (boxes.some((b) => b.held)) {
       boxes = updateHeldBoxes(boxes, currentTcpPoseMm());
       changed = true;
+    }
+    const blocked = isSensorBlocked(s.conveyor, s.sensor, boxes);
+    if (blocked !== s.sensorBlocked) {
+      set({ sensorBlocked: blocked, sensorCount: s.sensorCount + (blocked ? 1 : 0) });
+      log(blocked ? "Light sensor: box detected" : "Light sensor: clear");
     }
     if (changed) set({ boxes, conveyorRuntime: runtime });
   },
@@ -256,6 +310,8 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       platforms: s.platforms,
       conveyor: s.conveyor,
       conveyorRuntime: { ...s.conveyorRuntime, speedMmS: 0, targetMm: null },
+      sensor: s.sensor,
+      autoFeed: s.autoFeed,
     });
   },
 
@@ -269,6 +325,8 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       conveyor: data.conveyor,
       conveyorRuntime: { ...data.conveyorRuntime, speedMmS: 0, targetMm: null },
       nextBoxNum: maxNum + 1,
+      sensor: normalizeSensor(data.sensor, data.conveyor),
+      autoFeed: { ...DEFAULT_AUTO_FEED, ...(data.autoFeed ?? {}) },
     });
   },
 }));

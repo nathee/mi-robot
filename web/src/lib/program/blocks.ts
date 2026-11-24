@@ -79,7 +79,27 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
             label: `Gripper ${blk.state}`,
           });
           break;
+        case "WAIT_SENSOR":
+          steps.push({
+            type: "WAIT_SENSOR",
+            until: blk.until,
+            timeoutMs: Math.round(Math.max(1, Math.min(300, blk.timeoutSec)) * 1000),
+            blockId: blk.id,
+            label: blk.until === "CLEAR" ? "Wait sensor clear" : "Wait for box at sensor",
+          });
+          break;
         case "CONVEYOR":
+          if (blk.mode === "AUTO") {
+            const v = blk.value > 0 ? Math.max(5, Math.min(100, blk.value)) : 0;
+            steps.push({
+              type: "CONVEYOR",
+              mode: "AUTO",
+              value: v,
+              blockId: blk.id,
+              label: v ? `Conveyor auto-feed ${v}%` : "Conveyor auto-feed off",
+            });
+            break;
+          }
           steps.push(
             blk.mode === "SPEED"
               ? {
@@ -148,7 +168,18 @@ export function blocksToScript(blocks: readonly ProgramBlock[], indent = ""): st
         break;
       case "CONVEYOR":
         lines.push(
-          blk.mode === "SPEED" ? `${indent}conveyorSpeed(${blk.value})` : `${indent}conveyor(${blk.value})`
+          blk.mode === "AUTO"
+            ? blk.value > 0
+              ? `${indent}conveyorAuto("on", speed=${blk.value})`
+              : `${indent}conveyorAuto("off")`
+            : blk.mode === "SPEED"
+              ? `${indent}conveyorSpeed(${blk.value})`
+              : `${indent}conveyor(${blk.value})`
+        );
+        break;
+      case "WAIT_SENSOR":
+        lines.push(
+          `${indent}waitSensor(${blk.until === "CLEAR" ? `"clear", ` : ""}timeout=${blk.timeoutSec})`
         );
         break;
       case "TOOL":

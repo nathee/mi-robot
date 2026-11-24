@@ -98,6 +98,11 @@ function logCode(text: string, dir: "sys" | "ok" | "error" = "sys"): void {
   useSerialStore.getState().appendLog({ dir, text: `[CODE] ${text}` });
 }
 
+function sensorConditionMet(step: { until: "BLOCKED" | "CLEAR" }): boolean {
+  const blocked = useWorkcellStore.getState().sensorBlocked;
+  return step.until === "BLOCKED" ? blocked : !blocked;
+}
+
 /** Side effects of non-motion steps (tool action, conveyor, tool change). */
 function applyInstantStep(step: ProgramStep): void {
   const robot = useRobotStore.getState();
@@ -107,7 +112,8 @@ function applyInstantStep(step: ProgramStep): void {
     robot.setToolType(step.tool);
   } else if (step.type === "CONVEYOR") {
     const wc = useWorkcellStore.getState();
-    if (step.mode === "SPEED") wc.setConveyorSpeedPercent(step.value);
+    if (step.mode === "AUTO") wc.setAutoFeed(step.value > 0, step.value > 0 ? step.value : undefined);
+    else if (step.mode === "SPEED") wc.setConveyorSpeedPercent(step.value);
     else wc.moveConveyor(step.value, Boolean(step.absolute), step.feed);
     logCode(step.label);
   }
@@ -138,8 +144,9 @@ function computeStepDurationMs(
   if (step.type === "WAIT") return Math.max(50, step.durationMs);
   if (step.type === "GRIPPER" || step.type === "LOG") return 180;
   if (step.type === "TOOL") return 400;
+  if (step.type === "WAIT_SENSOR") return step.timeoutMs;
   if (step.type === "CONVEYOR") {
-    if (step.mode === "SPEED") return 180;
+    if (step.mode === "SPEED" || step.mode === "AUTO") return 180;
     const rt = useWorkcellStore.getState().conveyorRuntime;
     const dist = step.absolute ? step.value - rt.positionMm : step.value;
     const speed =
@@ -479,6 +486,9 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       applyInstantStep(step);
     } else if (step.type === "LOG") {
       logCode(step.message, "ok");
+    } else if (step.type === "WAIT_SENSOR") {
+      const ok = sensorConditionMet(step);
+      logCode(`${step.label}: sensor is ${useWorkcellStore.getState().sensorBlocked ? "blocked" : "clear"}${ok ? "" : " (not met yet)"}`);
     }
 
     set({
@@ -515,7 +525,18 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       return;
     }
 
-    const nextElapsed = Math.min(state.runtime.elapsedMs + Math.max(0, dtMs), state.runtime.durationMs);
+    let nextElapsed = Math.min(state.runtime.elapsedMs + Math.max(0, dtMs), state.runtime.durationMs);
+
+    // Wait for the conveyor light sensor: finish as soon as the condition holds, fail on timeout
+    if (step.type === "WAIT_SENSOR") {
+      if (sensorConditionMet(step)) {
+        nextElapsed = state.runtime.durationMs;
+      } else if (nextElapsed >= state.runtime.durationMs) {
+        set({ status: "ERROR", runtime: null });
+        logCode(`Timeout: ${step.label} (${(step.timeoutMs / 1000).toFixed(0)} s)`, "error");
+        return;
+      }
+    }
     const u = state.runtime.durationMs > 0 ? nextElapsed / state.runtime.durationMs : 1;
     const ease = pathTrajectorySample(u, "QUINTIC").position;
     const robot = useRobotStore.getState();

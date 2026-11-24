@@ -219,6 +219,32 @@ export function compileScriptProgram(source: string): CompileResult {
             sourceLine: line,
             label: `${callMatch[1]}(${d})`,
           });
+        } else if (fn === "conveyorauto") {
+          const m = argsRaw.match(/^["'](on|off)["']\s*(?:,\s*(?:speed\s*=\s*)?([-+]?\d+(?:\.\d+)?))?$/i);
+          if (!m) throw new Error(`conveyorAuto() expects "on" or "off", e.g. conveyorAuto("on", speed=60)`);
+          const on = m[1].toLowerCase() === "on";
+          const speed = m[2] !== undefined ? Number(m[2]) : 60;
+          if (on && (speed < 5 || speed > 100)) throw new Error("conveyorAuto speed must be between 5 and 100");
+          steps.push({
+            type: "CONVEYOR",
+            mode: "AUTO",
+            value: on ? speed : 0,
+            sourceLine: line,
+            label: on ? `conveyorAuto("on", ${speed})` : `conveyorAuto("off")`,
+          });
+        } else if (fn === "waitsensor") {
+          const m = argsRaw.match(/^(?:["'](box|clear)["'])?\s*,?\s*(?:timeout\s*=\s*)?(\d+(?:\.\d+)?)?$/i);
+          if (!m) throw new Error(`waitSensor() usage: waitSensor(), waitSensor("clear"), waitSensor(timeout=20)`);
+          const until = m[1]?.toLowerCase() === "clear" ? "CLEAR" : "BLOCKED";
+          const timeoutSec = m[2] !== undefined ? Number(m[2]) : 30;
+          if (timeoutSec <= 0 || timeoutSec > 300) throw new Error("waitSensor timeout must be 1-300 seconds");
+          steps.push({
+            type: "WAIT_SENSOR",
+            until,
+            timeoutMs: Math.round(timeoutSec * 1000),
+            sourceLine: line,
+            label: until === "CLEAR" ? `waitSensor("clear")` : "waitSensor()",
+          });
         } else if (fn === "conveyorspeed") {
           const { positional } = parseNumericArgs(argsRaw);
           const p = positional[0];
@@ -268,6 +294,59 @@ export function scriptToGcode(
 }
 
 export const SAMPLE_SCRIPTS: Record<string, { name: string; code: string }> = {
+  sensorFeed: {
+    name: "Auto Feed + Light Sensor (Suction)",
+    code: `# Workcell preset "Conveyor Feed" (Tools tab -> Workcell)
+# Auto-feed runs the belt until a box breaks the light beam, then stops.
+# When the box is lifted away, the beam clears and the belt runs again.
+tool("SUCTION")
+home()
+conveyorAuto("on", speed=60)
+
+log("Box 1")
+  waitSensor(timeout=30)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 70, 110, 0, 0, 0, speed=100)
+  moveL(200, 70, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 70, 110, 0, 0, 0, speed=90)
+
+log("Box 2")
+  waitSensor(timeout=30)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 110, 110, 0, 0, 0, speed=100)
+  moveL(200, 110, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 110, 110, 0, 0, 0, speed=90)
+
+log("Box 3")
+  waitSensor(timeout=30)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(132.5, -150, 86, 0, 0, 0, speed=40)
+  suction("on")
+  wait(0.3)
+  moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+  moveL(200, 150, 110, 0, 0, 0, speed=100)
+  moveL(200, 150, 47, 0, 0, 0, speed=40)
+  suction("off")
+  wait(0.3)
+  moveL(200, 150, 110, 0, 0, 0, speed=90)
+
+conveyorAuto("off")
+home()
+log("Done: 3 boxes sorted by the light sensor")
+`,
+  },
   conveyorPick: {
     name: "Conveyor → Pick → Tray (Suction)",
     code: `# Workcell preset "Conveyor Feed" (Tools tab → Workcell)
