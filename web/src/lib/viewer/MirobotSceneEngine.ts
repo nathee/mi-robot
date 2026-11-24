@@ -89,6 +89,7 @@ export class MirobotSceneEngine {
   private animFrameId = 0;
   private lastFrameTs = 0;
   private unsubscribers: Array<() => void> = [];
+  private lastCollision: string | null = null;
   private onViewGizmoUpdate?: (proj: ViewGizmoProjection) => void;
   private onLoaded?: () => void;
   private disposed = false;
@@ -588,6 +589,12 @@ export class MirobotSceneEngine {
 
     // Work-cell: conveyor belt motion + boxes carried by the tool
     useWorkcellStore.getState().step(dtMs);
+    const collision = useWorkcellStore.getState().collision;
+    if (collision && collision !== this.lastCollision) {
+      useCodeStore.getState().haltOnCollision(collision);
+      usePathStore.getState().haltOnCollision(collision);
+    }
+    this.lastCollision = collision;
 
     // Animate the mounted end-effector toward its OPEN / CLOSE state
     if (this.toolVisual) {

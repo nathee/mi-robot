@@ -9,6 +9,43 @@ export function nextBlockId(): string {
   return `blk_${Date.now().toString(36)}_${blockSeq++}`;
 }
 
+/** Deep copy of a block (and a Repeat's children) with fresh ids. */
+export function cloneBlockWithNewIds(block: ProgramBlock): ProgramBlock {
+  const copy = structuredClone(block);
+  copy.id = nextBlockId();
+  if (copy.kind === "REPEAT") copy.children = copy.children.map(cloneBlockWithNewIds);
+  return copy;
+}
+
+/**
+ * Inserts a copy of the block with this id right after it, at whatever nesting level it lives
+ * (top level or inside a Repeat). Returns the new list and the copy's id (null if not found).
+ */
+export function duplicateBlockInList(
+  blocks: readonly ProgramBlock[],
+  id: string
+): { blocks: ProgramBlock[]; newId: string | null } {
+  let newId: string | null = null;
+  const visit = (list: readonly ProgramBlock[]): ProgramBlock[] => {
+    const out: ProgramBlock[] = [];
+    for (const b of list) {
+      if (newId === null && b.kind === "REPEAT" && b.id !== id) {
+        out.push({ ...b, children: visit(b.children) });
+      } else {
+        out.push(b);
+      }
+      if (newId === null && b.id === id) {
+        const copy = cloneBlockWithNewIds(b);
+        newId = copy.id;
+        out.push(copy);
+      }
+    }
+    return out;
+  };
+  const next = visit(blocks);
+  return { blocks: newId ? next : blocks.slice(), newId };
+}
+
 export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileResult {
   const steps: ProgramStep[] = [];
   const errors: CompileError[] = [];

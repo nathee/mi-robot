@@ -405,36 +405,187 @@ export function supportHeightAt(
   return best;
 }
 
+// ---------------------------------------------------------------------------
+// Contact: stacking, toppling and collisions (boxes treated as axis-aligned cubes)
+// ---------------------------------------------------------------------------
+
+/** Footprints must overlap by more than this (mm) on both axes to touch / support. */
+const CONTACT_EPS_MM = 0.5;
+/** Interpenetration (mm) tolerated before a held box counts as colliding. */
+export const COLLISION_TOL_MM = 2;
+
+interface SupportSurface {
+  id: string;
+  label: string;
+  top: number;
+  /** Underside height: 0 for platforms / conveyor (solid from the floor), box bottom for boxes. */
+  bottom: number;
+  cx: number;
+  cy: number;
+  hx: number;
+  hy: number;
+}
+
+interface ContactCtx {
+  boxes: readonly WorkBox[];
+  platforms: readonly Platform[];
+  conveyor: ConveyorConfig;
+}
+
+function overlapLen(a: number, ah: number, b: number, bh: number): number {
+  return Math.min(a + ah, b + bh) - Math.max(a - ah, b - bh);
+}
+
+/** Solid surfaces in the cell (tray platforms, conveyor body, resting boxes), excluding one box. */
+function solidSurfaces(ctx: ContactCtx, ignoreId?: string): SupportSurface[] {
+  const out: SupportSurface[] = ctx.platforms.map((p) => ({
+    id: p.id,
+    label: p.label,
+    top: p.topZ,
+    bottom: 0,
+    cx: p.x,
+    cy: p.y,
+    hx: p.sizeX / 2,
+    hy: p.sizeY / 2,
+  }));
+  const c = ctx.conveyor;
+  const { min, max, cross } = conveyorExtent(c);
+  const halfLen = (max - min) / 2;
+  const mid = (max + min) / 2;
+  out.push(
+    c.axis === "x"
+      ? { id: "conveyor", label: "Conveyor", top: c.topZ, bottom: 0, cx: mid, cy: cross, hx: halfLen, hy: c.widthMm / 2 }
+      : { id: "conveyor", label: "Conveyor", top: c.topZ, bottom: 0, cx: cross, cy: mid, hx: c.widthMm / 2, hy: halfLen }
+  );
+  for (const b of ctx.boxes) {
+    if (b.held || b.id === ignoreId) continue;
+    out.push({ id: b.id, label: b.id, top: b.z + b.size / 2, bottom: b.z - b.size / 2, cx: b.x, cy: b.y, hx: b.size / 2, hy: b.size / 2 });
+  }
+  return out;
+}
+
+function yawOnly(q: readonly [number, number, number, number]): Quaternion {
+  const e = new Euler().setFromQuaternion(new Quaternion(q[0], q[1], q[2], q[3]), "ZYX");
+  return new Quaternion().setFromEuler(new Euler(0, 0, e.z, "ZYX"));
+}
+
+export interface LandingEvent {
+  boxId: string;
+  /** Box (or surface) it tipped off, when it toppled. */
+  toppledOff?: string;
+  /** What it finally rests on. */
+  restsOn: string;
+}
+
 /**
- * Releases held boxes: keeps only their yaw and drops them straight down onto the
- * highest surface underneath (floor, tray, conveyor belt or another box).
+ * Drops a box straight down onto whatever is under its footprint. If its centre isn't over the
+ * surface it lands on (e.g. placed half over the edge of another box), it tips over that edge,
+ * rotates 90° and falls to the next surface below.
  */
+export function landBox(box: WorkBox, ctx: ContactCtx, depth = 0): { box: WorkBox; event: LandingEvent } {
+  const half = box.size / 2;
+  const top = box.z + half;
+  const surfaces = solidSurfaces(ctx, box.id).filter(
+    (s) =>
+      s.top <= top - 1 &&
+      overlapLen(box.x, half, s.cx, s.hx) > CONTACT_EPS_MM &&
+      overlapLen(box.y, half, s.cy, s.hy) > CONTACT_EPS_MM
+  );
+  const height = surfaces.reduce((m, s) => Math.max(m, s.top), 0);
+  const resting = surfaces.filter((s) => Math.abs(s.top - height) < 0.5);
+  const q = new Quaternion(box.q[0], box.q[1], box.q[2], box.q[3]);
+  const settled = (b: WorkBox, quat: Quaternion, restsOn: string) => ({
+    box: { ...b, held: false, heldOffset: undefined, z: height + half, q: [quat.x, quat.y, quat.z, quat.w] as WorkBox["q"] },
+    event: { boxId: b.id, restsOn },
+  });
+
+  if (resting.length === 0) return settled(box, q, "Floor");
+  const centreSupported = resting.some(
+    (s) => Math.abs(box.x - s.cx) <= s.hx + 1e-6 && Math.abs(box.y - s.cy) <= s.hy + 1e-6
+  );
+  if (centreSupported || depth >= 3) return settled(box, q, resting[0].label);
+
+  // Centre of mass hangs over the edge: tip off the surface it overlaps most.
+  const s = resting.reduce((a, b) =>
+    overlapLen(box.x, half, a.cx, a.hx) * overlapLen(box.y, half, a.cy, a.hy) >=
+    overlapLen(box.x, half, b.cx, b.hx) * overlapLen(box.y, half, b.cy, b.hy)
+      ? a
+      : b
+  );
+  const exX = Math.abs(box.x - s.cx) - s.hx;
+  const exY = Math.abs(box.y - s.cy) - s.hy;
+  const alongX = exX >= exY;
+  const sign = alongX ? Math.sign(box.x - s.cx) || 1 : Math.sign(box.y - s.cy) || 1;
+  const tip = new Quaternion().setFromAxisAngle(
+    alongX ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0),
+    (alongX ? sign : -sign) * (Math.PI / 2)
+  );
+  const fallen: WorkBox = {
+    ...box,
+    x: alongX ? s.cx + sign * (s.hx + half + 0.5) : box.x,
+    y: alongX ? box.y : s.cy + sign * (s.hy + half + 0.5),
+    z: height + half,
+    q: (() => {
+      const nq = tip.multiply(q);
+      return [nq.x, nq.y, nq.z, nq.w] as WorkBox["q"];
+    })(),
+  };
+  const res = landBox(fallen, ctx, depth + 1);
+  return { box: res.box, event: { ...res.event, toppledOff: res.event.toppledOff ?? s.label } };
+}
+
+/**
+ * Releases held boxes: keeps only their yaw and lands them on the highest surface under their
+ * footprint (floor, tray, conveyor belt or other boxes), toppling them if they hang over an edge.
+ */
+export function releaseBoxesDetailed(
+  boxes: readonly WorkBox[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig
+): { boxes: WorkBox[]; events: LandingEvent[] } {
+  let next = boxes.map((b) => ({ ...b }));
+  const events: LandingEvent[] = [];
+  for (const held of next.filter((b) => b.held)) {
+    const yaw = yawOnly(held.q);
+    const start: WorkBox = { ...held, held: false, heldOffset: undefined, q: [yaw.x, yaw.y, yaw.z, yaw.w] };
+    const others = next.filter((b) => b.id !== held.id);
+    const { box, event } = landBox(start, { boxes: others, platforms, conveyor });
+    events.push(event);
+    next = next.map((b) => (b.id === held.id ? box : b));
+  }
+  return { boxes: next, events };
+}
+
 export function releaseBoxes(
   boxes: readonly WorkBox[],
   platforms: readonly Platform[],
   conveyor: ConveyorConfig
 ): WorkBox[] {
-  let next = boxes.map((b) => ({ ...b }));
-  for (const box of next.filter((b) => b.held)) {
-    const e = new Euler().setFromQuaternion(new Quaternion(...box.q), "ZYX");
-    const yawQ = new Quaternion().setFromEuler(new Euler(0, 0, e.z, "ZYX"));
-    const bottom = box.z - box.size / 2;
-    const support = supportHeightAt(box.x, box.y, bottom + 2, {
-      boxes: next,
-      platforms,
-      conveyor,
-      ignoreId: box.id,
-    });
-    const placed: WorkBox = {
-      ...box,
-      held: false,
-      heldOffset: undefined,
-      z: support + box.size / 2,
-      q: [yawQ.x, yawQ.y, yawQ.z, yawQ.w],
-    };
-    next = next.map((b) => (b.id === box.id ? placed : b));
+  return releaseBoxesDetailed(boxes, platforms, conveyor).boxes;
+}
+
+/**
+ * Returns a description when a box carried by the tool is pushed into another box, the tray,
+ * the conveyor or the floor (more than COLLISION_TOL_MM of interpenetration), else null.
+ */
+export function findHeldCollision(
+  boxes: readonly WorkBox[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig
+): string | null {
+  for (const h of boxes) {
+    if (!h.held) continue;
+    const half = h.size / 2;
+    const bottom = h.z - half;
+    if (bottom < -COLLISION_TOL_MM) return `${h.id} hit the floor`;
+    for (const s of solidSurfaces({ boxes, platforms, conveyor }, h.id)) {
+      if (overlapLen(h.x, half, s.cx, s.hx) <= COLLISION_TOL_MM) continue;
+      if (overlapLen(h.y, half, s.cy, s.hy) <= COLLISION_TOL_MM) continue;
+      const zOverlap = Math.min(h.z + half, s.top) - Math.max(bottom, s.bottom);
+      if (zOverlap > COLLISION_TOL_MM) return `${h.id} hit ${s.label}`;
+    }
   }
-  return next;
+  return null;
 }
 
 export type WorkcellPresetId = "PICK_PLACE" | "CONVEYOR";

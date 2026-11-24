@@ -11,7 +11,9 @@ import {
   graspBox,
   isOnConveyor,
   makeBox,
+  findHeldCollision,
   releaseBoxes,
+  releaseBoxesDetailed,
   stepConveyor,
   updateHeldBoxes,
   type TcpPoseMm,
@@ -119,5 +121,43 @@ describe("protocol: conveyor and tool commands", () => {
     expect(parseIncomingHardwareLine("@01M3 S1000", { ...opts, toolType: "MICRO_SERVO" })).toMatchObject({ kind: "GRIPPER", state: "OPEN" });
     expect(parseIncomingHardwareLine("@01M3 S1000", { ...opts, toolType: "SUCTION" })).toMatchObject({ kind: "GRIPPER", state: "CLOSE" });
     expect(parseIncomingHardwareLine("@01M3 S40", { ...opts, toolType: "MICRO_SERVO" })).toMatchObject({ kind: "GRIPPER", state: "CLOSE" });
+  });
+});
+
+describe("box contact: stacking, toppling, collisions", () => {
+  const S = 25;
+  const onTray = (id: string, x: number, y: number) => makeBox({ id, x, y, z: tray.topZ + S / 2 });
+  const heldAt = (id: string, x: number, y: number, z: number) => ({ ...makeBox({ id, x, y, z }), held: true });
+
+  it("a box released right on top of another stacks instead of overlapping", () => {
+    const { boxes, events } = releaseBoxesDetailed([onTray("a", 200, 110), heldAt("b", 200, 110, 90)], DEFAULT_PLATFORMS, conveyor);
+    expect(boxes[1].z).toBeCloseTo(tray.topZ + S + S / 2, 6);
+    expect(events[0]).toEqual({ boxId: "b", restsOn: "a" });
+  });
+
+  it("a partly overlapping box still lands on top while its centre is supported (no interpenetration)", () => {
+    // 10 mm offset: the old centre-point check dropped it onto the tray, inside box a
+    const { boxes } = releaseBoxesDetailed([onTray("a", 200, 110), heldAt("b", 200, 120, 90)], DEFAULT_PLATFORMS, conveyor);
+    expect(boxes[1].z).toBeCloseTo(tray.topZ + S + S / 2, 6);
+    expect(boxes[1].y).toBe(120);
+  });
+
+  it("a box hanging over the edge topples off, turns 90° and rests beside", () => {
+    // centre 15 mm off: beyond a's half-width (12.5) -> unstable
+    const { boxes, events } = releaseBoxesDetailed([onTray("a", 200, 110), heldAt("b", 200, 125, 90)], DEFAULT_PLATFORMS, conveyor);
+    const b = boxes[1];
+    expect(events[0]).toEqual({ boxId: "b", toppledOff: "a", restsOn: "Tray" });
+    expect(b.z).toBeCloseTo(tray.topZ + S / 2, 6);
+    expect(b.y - boxes[0].y).toBeGreaterThanOrEqual(S); // no overlap with a
+    const tilt = new Quaternion(...b.q).angleTo(new Quaternion());
+    expect(tilt).toBeCloseTo(Math.PI / 2, 4);
+  });
+
+  it("detects a carried box pushed into another box, but not resting contact or side-by-side", () => {
+    const a = onTray("a", 200, 110);
+    expect(findHeldCollision([a, heldAt("b", 200, 110, tray.topZ + S + S / 2 - 5)], DEFAULT_PLATFORMS, conveyor)).toBe("b hit a");
+    expect(findHeldCollision([a, heldAt("b", 200, 110, tray.topZ + S + S / 2)], DEFAULT_PLATFORMS, conveyor)).toBeNull();
+    expect(findHeldCollision([a, heldAt("b", 200 + S, 110, tray.topZ + S / 2)], DEFAULT_PLATFORMS, conveyor)).toBeNull();
+    expect(findHeldCollision([heldAt("b", 200, 110, tray.topZ + S / 2 - 6)], DEFAULT_PLATFORMS, conveyor)).toBe("b hit Tray");
   });
 });

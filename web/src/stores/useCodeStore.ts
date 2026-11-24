@@ -15,6 +15,7 @@ import {
   blocksToScript,
   compileBlocksProgram,
   createDemoBlocks,
+  duplicateBlockInList,
   nextBlockId,
 } from "@/lib/program/blocks";
 import { pathTargetsToBlocks } from "@/lib/program/pathToBlocks";
@@ -75,6 +76,8 @@ interface CodeState {
   addBlock: (block: ProgramBlock, parentRepeatId?: string) => void;
   updateBlock: (id: string, updater: (b: ProgramBlock) => ProgramBlock) => void;
   removeBlock: (id: string) => void;
+  /** Inserts a copy of a block (including a Repeat's contents) right after it. */
+  duplicateBlock: (id: string) => void;
   moveBlock: (fromIdx: number, toIdx: number) => void;
   loadSampleBlocks: () => void;
 
@@ -94,6 +97,8 @@ interface CodeState {
   runOrPause: () => void;
   stepOnce: () => void;
   stop: (reason?: string) => void;
+  /** Aborts a running program with ERROR when the carried box collides. */
+  haltOnCollision: (message: string) => void;
   advanceCodeFrame: (dtMs: number) => void;
 }
 
@@ -236,6 +241,13 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       blocks: mapBlocksRecursive(s.blocks, (b) => (b.id === id ? updater(b) : b)),
       errors: [],
     }));
+  },
+
+  duplicateBlock(id) {
+    const { blocks, newId } = duplicateBlockInList(get().blocks, id);
+    if (!newId) return;
+    useProjectStore.getState().setDirty(true);
+    set({ blocks, errors: [] });
   },
 
   removeBlock(id) {
@@ -556,6 +568,13 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       runtime: null,
     });
     if (reason) logCode(reason);
+  },
+
+  haltOnCollision(message) {
+    const st = get().status;
+    if (st !== "RUNNING" && st !== "PAUSED") return;
+    set({ status: "ERROR", runtime: null });
+    logCode(`Stopped: collision (${message})`, "error");
   },
 
   advanceCodeFrame(dtMs) {

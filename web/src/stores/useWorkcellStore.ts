@@ -25,7 +25,8 @@ import {
   findGraspTarget,
   graspBox,
   makeBox,
-  releaseBoxes,
+  findHeldCollision,
+  releaseBoxesDetailed,
   settleBoxes,
   stepConveyor,
   supportHeightAt,
@@ -48,6 +49,8 @@ interface WorkcellState extends WorkcellSnapshot {
   preset: WorkcellPresetId;
   nextBoxNum: number;
   lastGraspMessage: string;
+  /** Set while a box carried by the tool is pushed into something (e.g. "box-2 hit box-1"). */
+  collision: string | null;
 
   loadPreset: (id: WorkcellPresetId) => void;
   addBox: (where: "CONVEYOR" | "TRAY", size?: number) => void;
@@ -95,6 +98,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   preset: "CONVEYOR",
   nextBoxNum: initial.boxes.length + 1,
   lastGraspMessage: "",
+  collision: null,
 
   loadPreset(id) {
     const snap = buildPreset(id);
@@ -284,6 +288,12 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       log(blocked ? "Light sensor: box detected" : "Light sensor: clear");
     }
     if (changed) set({ boxes, conveyorRuntime: runtime });
+
+    const collision = boxes.some((b) => b.held) ? findHeldCollision(boxes, s.platforms, s.conveyor) : null;
+    if (collision !== s.collision) {
+      set({ collision });
+      if (collision) log(`Collision: ${collision}`, "error");
+    }
   },
 
   grab() {
@@ -312,10 +322,12 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   release() {
     const s = get();
     if (!s.boxes.some((b) => b.held)) return;
-    const boxes = releaseBoxes(s.boxes, s.platforms, s.conveyor);
-    const dropped = s.boxes.filter((b) => b.held).map((b) => b.id);
-    set({ boxes, lastGraspMessage: "" });
-    log(`Released ${dropped.join(", ")}`);
+    const { boxes, events } = releaseBoxesDetailed(s.boxes, s.platforms, s.conveyor);
+    set({ boxes, lastGraspMessage: "", collision: null });
+    for (const e of events) {
+      if (e.toppledOff) log(`Released ${e.boxId}: toppled off ${e.toppledOff} onto ${e.restsOn}`, "error");
+      else log(`Released ${e.boxId} onto ${e.restsOn}`);
+    }
   },
 
   snapshot() {

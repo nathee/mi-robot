@@ -25,6 +25,7 @@ import {
   Square,
   Trash2,
   Wrench,
+  Copy,
 } from "lucide-react";
 import { nextBlockId } from "@/lib/program/blocks";
 import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
@@ -77,6 +78,7 @@ function BlockCard({
 }: BlockCardProps) {
   const updateBlock = useCodeStore((s) => s.updateBlock);
   const removeBlock = useCodeStore((s) => s.removeBlock);
+  const duplicateBlock = useCodeStore((s) => s.duplicateBlock);
   const addBlock = useCodeStore((s) => s.addBlock);
 
   const captureCurrentIntoBlock = () => {
@@ -175,6 +177,16 @@ function BlockCard({
               Use Pose
             </button>
           )}
+          <button
+            type="button"
+            disabled={isLocked}
+            onClick={() => duplicateBlock(block.id)}
+            title="Duplicate block"
+            aria-label="Duplicate block"
+            className="rounded-md p-0.5 text-slate-400 transition hover:bg-sky-50 hover:text-sky-500 disabled:opacity-35 dark:hover:bg-sky-950/50"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
           <button
             type="button"
             disabled={isLocked}

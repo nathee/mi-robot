@@ -89,6 +89,8 @@ interface PathState {
   togglePlayback: () => void;
   stopPlayback: (reason?: string) => void;
   cancelForManualControl: () => void;
+  /** Aborts playback with ERROR when the carried box collides. */
+  haltOnCollision: (message: string) => void;
   resetPlayback: () => void;
   stepProgram: () => void;
   advancePlaybackFrame: (dtMs: number) => void;
@@ -475,6 +477,13 @@ export const usePathStore = create<PathState>((set, get) => ({
       repeatRemaining: 0,
     });
     if (reason) logPath(reason);
+  },
+
+  haltOnCollision(message) {
+    const st = get().status;
+    if (st !== "PLAYING" && st !== "PAUSED") return;
+    set({ status: "ERROR", segmentElapsedMs: 0, repeatRemaining: 0 });
+    logPath(`Stopped: collision (${message})`, "error");
   },
 
   cancelForManualControl() {
