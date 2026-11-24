@@ -372,10 +372,17 @@ export function ToolPanel() {
                       <span className="font-semibold text-slate-800 dark:text-slate-100">
                         {b.id}
                       </span>
-                      <span className="flex-1 truncate text-right font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
+                      <span
+                        className="flex-1 truncate text-right font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400"
+                        title={
+                          b.held
+                            ? "Held by tool"
+                            : `Center (${b.x.toFixed(1)}, ${b.y.toFixed(1)}, ${b.z.toFixed(1)}) · Top Z ${(b.z + b.size / 2).toFixed(1)} mm`
+                        }
+                      >
                         {b.held
                           ? "Held by tool"
-                          : `${b.x.toFixed(0)}, ${b.y.toFixed(0)}, ${b.z.toFixed(0)} mm`}
+                          : `${b.x.toFixed(0)}, ${b.y.toFixed(0)} · top ${(b.z + b.size / 2).toFixed(0)} mm`}
                       </span>
                       <button
                         type="button"

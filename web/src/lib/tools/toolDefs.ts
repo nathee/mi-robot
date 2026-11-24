@@ -58,7 +58,7 @@ export const TOOL_DEFS: Record<ToolType, ToolDef> = {
     shortLabel: "Suction",
     description: "Vacuum pump + suction cup. M3 S1000 = suck, M3 S500 = blow, M3 S0 = off.",
     tcpOffsetMm: 52,
-    graspRadiusMm: 14,
+    graspRadiusMm: 15,
     graspHeightTolMm: 6,
     maxObjectSizeMm: 60,
     grabCode: "M3 S1000",

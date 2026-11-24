@@ -330,7 +330,8 @@ export type GraspFailReason = "NO_TOOL" | "NOTHING_IN_REACH" | "TOO_LARGE" | "AL
 export function findGraspTarget(
   boxes: readonly WorkBox[],
   tcp: TcpPoseMm,
-  tool: ToolDef
+  tool: ToolDef,
+  options: { contactOnly?: boolean } = {}
 ): { box: WorkBox } | { reason: GraspFailReason } {
   if (tool.maxObjectSizeMm <= 0) return { reason: "NO_TOOL" };
   if (boxes.some((b) => b.held)) return { reason: "ALREADY_HOLDING" };
@@ -341,8 +342,15 @@ export function findGraspTarget(
     const top = box.z + box.size / 2;
     const dxy = Math.hypot(box.x - tcp.x, box.y - tcp.y);
     if (dxy > tool.graspRadiusMm) continue;
-    const zMin = tool.type === "SUCTION" ? top - 3 : box.z - box.size * 0.25;
-    const zMax = top + tool.graspHeightTolMm;
+    // Suction cup seals at the top face (only ~2-3 mm bellows compression, never deep inside the box).
+    const zMin =
+      tool.type === "SUCTION"
+        ? top - (options.contactOnly ? 2.5 : 3)
+        : box.z - box.size * 0.25;
+    const zMax =
+      tool.type === "SUCTION" && options.contactOnly
+        ? top + 2.5
+        : top + tool.graspHeightTolMm;
     if (tcp.z < zMin || tcp.z > zMax) continue;
     if (box.size > tool.maxObjectSizeMm) {
       tooLarge = true;
@@ -583,6 +591,34 @@ export function findHeldCollision(
       if (overlapLen(h.y, half, s.cy, s.hy) <= COLLISION_TOL_MM) continue;
       const zOverlap = Math.min(h.z + half, s.top) - Math.max(bottom, s.bottom);
       if (zOverlap > COLLISION_TOL_MM) return `${h.id} hit ${s.label}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns a description when the robot end-effector tip (TCP) pierces into the floor, conveyor,
+ * tray, or (for centerline tools like the suction cup / bare flange) a resting box.
+ * Finger grippers are allowed around the sides of a box down to its bottom, but still collide
+ * with solid tables, conveyor belt, and floor.
+ */
+export function findToolCollision(
+  tcp: TcpPoseMm,
+  tool: ToolDef,
+  boxes: readonly WorkBox[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig
+): string | null {
+  if (tcp.z < -COLLISION_TOL_MM) return `${tool.label} hit the floor`;
+
+  const tipHalf = tool.type === "SUCTION" ? 4 : 2;
+  const checkBoxes = tool.type === "SUCTION" || tool.type === "NONE";
+
+  for (const s of solidSurfaces({ boxes: checkBoxes ? boxes : [], platforms, conveyor })) {
+    if (overlapLen(tcp.x, tipHalf, s.cx, s.hx) <= COLLISION_TOL_MM) continue;
+    if (overlapLen(tcp.y, tipHalf, s.cy, s.hy) <= COLLISION_TOL_MM) continue;
+    if (tcp.z < s.top - COLLISION_TOL_MM && tcp.z > s.bottom - 10) {
+      return `${tool.label} hit ${s.label}`;
     }
   }
   return null;

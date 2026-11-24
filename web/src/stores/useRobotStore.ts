@@ -39,6 +39,8 @@ interface RobotState {
   workspaceStatus: WorkspaceStatusState;
   gripperState: GripperState;
   gripperPwm: number;
+  /** Increments on every explicit setGripper() call so repeated Grab/Suck clicks retry grasping. */
+  gripperCommandSeq: number;
   toolType: ToolType;
 
   setJoint: (index: number, deg: number, options?: { log?: boolean }) => void;
@@ -86,6 +88,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
   workspaceStatus: { out: false, message: "" },
   gripperState: "OPEN",
   gripperPwm: 0,
+  gripperCommandSeq: 0,
   toolType: DEFAULT_TOOL,
 
   setJoint(index, deg, options = {}) {
@@ -150,7 +153,11 @@ export const useRobotStore = create<RobotState>((set, get) => ({
 
   setGripper(state, pwm, options = {}) {
     const resolvedPwm = state === "CLOSE" ? Math.max(1, Math.min(1000, pwm ?? 1000)) : 0;
-    set({ gripperState: state, gripperPwm: resolvedPwm });
+    set((prev) => ({
+      gripperState: state,
+      gripperPwm: resolvedPwm,
+      gripperCommandSeq: prev.gripperCommandSeq + 1,
+    }));
     if (options.log === false) return;
     const def = TOOL_DEFS[get().toolType];
     useSerialStore.getState().appendLog({

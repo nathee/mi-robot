@@ -26,6 +26,7 @@ import {
   graspBox,
   makeBox,
   findHeldCollision,
+  findToolCollision,
   releaseBoxesDetailed,
   settleBoxes,
   stepConveyor,
@@ -278,9 +279,21 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       boxes = res.boxes;
       changed = true;
     }
+    const robot = useRobotStore.getState();
+    const tcp = currentTcpPoseMm(robot.joints);
+
     if (boxes.some((b) => b.held)) {
-      boxes = updateHeldBoxes(boxes, currentTcpPoseMm());
+      boxes = updateHeldBoxes(boxes, tcp);
       changed = true;
+    } else if (robot.toolType === "SUCTION" && robot.gripperState === "CLOSE") {
+      // Active vacuum suction picks up a box as soon as the cup physically touches its top face.
+      const res = findGraspTarget(boxes, tcp, TOOL_DEFS.SUCTION, { contactOnly: true });
+      if ("box" in res) {
+        boxes = graspBox(boxes, res.box.id, tcp);
+        changed = true;
+        set({ lastGraspMessage: `Holding ${res.box.id}` });
+        log(`${TOOL_DEFS.SUCTION.label}: picked ${res.box.id}`);
+      }
     }
     const blocked = isSensorBlocked(s.conveyor, s.sensor, boxes);
     if (blocked !== s.sensorBlocked) {
@@ -289,7 +302,10 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     }
     if (changed) set({ boxes, conveyorRuntime: runtime });
 
-    const collision = boxes.some((b) => b.held) ? findHeldCollision(boxes, s.platforms, s.conveyor) : null;
+    const hasHeld = boxes.some((b) => b.held);
+    const collision = hasHeld
+      ? findHeldCollision(boxes, s.platforms, s.conveyor)
+      : findToolCollision(tcp, TOOL_DEFS[robot.toolType], boxes, s.platforms, s.conveyor);
     if (collision !== s.collision) {
       set({ collision });
       if (collision) log(`Collision: ${collision}`, "error");
@@ -306,9 +322,28 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       log(`${tool.label}: picked ${res.box.id}`);
       return true;
     }
+    let nothingMsg = "No box within reach of the TCP";
+    if (res.reason === "NOTHING_IN_REACH" && s.boxes.length > 0) {
+      let nearest = s.boxes[0];
+      let bestDist = Infinity;
+      for (const b of s.boxes) {
+        if (b.held) continue;
+        const d = Math.hypot(b.x - tcp.x, b.y - tcp.y, b.z + b.size / 2 - tcp.z);
+        if (d < bestDist) {
+          bestDist = d;
+          nearest = b;
+        }
+      }
+      if (nearest && !nearest.held) {
+        const dxy = Math.hypot(nearest.x - tcp.x, nearest.y - tcp.y);
+        const dz = tcp.z - (nearest.z + nearest.size / 2);
+        const dzText = `${dz >= 0 ? "+" : ""}${dz.toFixed(0)}mm vs top`;
+        nothingMsg = `No box in reach (nearest ${nearest.id}: XY ${dxy.toFixed(0)}mm, Z ${dzText})`;
+      }
+    }
     const messages: Record<typeof res.reason, string> = {
       NO_TOOL: "No end-effector mounted",
-      NOTHING_IN_REACH: "No box within reach of the TCP",
+      NOTHING_IN_REACH: nothingMsg,
       TOO_LARGE: `Box is too large for the ${tool.label}`,
       ALREADY_HOLDING: "Already holding a box",
     };
@@ -364,7 +399,14 @@ useRobotStore.subscribe((state, prev) => {
     useWorkcellStore.getState().release();
     return;
   }
-  if (state.gripperState === prev.gripperState) return;
-  if (state.gripperState === "CLOSE") useWorkcellStore.getState().grab();
-  else useWorkcellStore.getState().release();
+  if (state.gripperState === prev.gripperState && state.gripperCommandSeq === prev.gripperCommandSeq) {
+    return;
+  }
+  if (state.gripperState === "CLOSE") {
+    if (!useWorkcellStore.getState().boxes.some((b) => b.held)) {
+      useWorkcellStore.getState().grab();
+    }
+  } else {
+    useWorkcellStore.getState().release();
+  }
 });
