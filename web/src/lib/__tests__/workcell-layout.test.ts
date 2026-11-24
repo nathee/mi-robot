@@ -83,8 +83,38 @@ describe("light sensor", () => {
   it("detects a box at the end stop, ignores boxes upstream and lifted boxes", () => {
     expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [atStop])).toBe(true);
     expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [far])).toBe(false);
-    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...atStop, held: true }])).toBe(false);
     expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...atStop, z: atStop.z + 30 }])).toBe(false);
+  });
+
+  it("a gripped box keeps blocking the beam until it is lifted clear", () => {
+    const held = { ...atStop, held: true };
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [held])).toBe(true);
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...held, z: held.z + 5 }])).toBe(true);
+    expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [{ ...held, z: held.z + 30 }])).toBe(false);
+  });
+
+  it("the next box waits while the gripped box is still on the belt, then feeds after lifting", () => {
+    const auto = { enabled: true, speedPercent: 60 };
+    const next = makeBox({ id: "n", x: min + 12.5 + 40, y: cross, z: conveyor.topZ + 12.5 });
+    const run = (boxes: ReturnType<typeof makeBox>[], frames: number) => {
+      let rt = defaultConveyorRuntime();
+      for (let i = 0; i < frames; i++) {
+        rt = { ...rt, speedMmS: autoFeedSpeedMmS(auto, isSensorBlocked(conveyor, DEFAULT_SENSOR, boxes)) };
+        const res = stepConveyor(conveyor, rt, boxes, 16);
+        rt = res.runtime;
+        boxes = res.boxes;
+      }
+      return boxes;
+    };
+    // Gripper closed, box not lifted yet: belt must stay stopped
+    const gripped = run([{ ...atStop, held: true }, next], 200);
+    expect(gripped[1].x).toBeCloseTo(next.x, 6);
+    // Even with the beam forced clear by a command, the next box can't slide into the gripped one
+    const pushed = stepConveyor(conveyor, { ...defaultConveyorRuntime(), speedMmS: -50 }, [{ ...atStop, held: true }, next], 2000).boxes;
+    expect(pushed[1].x).toBeGreaterThanOrEqual(atStop.x + 25 - 1e-6);
+    // Lifted well above the belt: the next box feeds up to the end stop
+    const lifted = run([{ ...atStop, held: true, z: atStop.z + 60 }, next], 400);
+    expect(lifted[1].x - (min + 12.5)).toBeLessThan(3);
   });
 
   it("auto feed runs while clear and stops when blocked", () => {

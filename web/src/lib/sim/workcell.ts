@@ -128,15 +128,22 @@ export function normalizeSensor(s: Partial<LightSensorConfig> | undefined, c: Co
   };
 }
 
+/** Beam height above the belt surface (mm). */
+export const SENSOR_BEAM_HEIGHT_MM = 10;
+
 /** World position (mm) of the sensor beam centre line on the belt. */
 export function sensorBeamPoint(c: ConveyorConfig, sensor: LightSensorConfig): { x: number; y: number; z: number } {
   const { min, cross } = conveyorExtent(c);
   const a = min + sensor.offsetMm;
-  const z = c.topZ + 10;
+  const z = c.topZ + SENSOR_BEAM_HEIGHT_MM;
   return c.axis === "x" ? { x: a, y: cross, z } : { x: cross, y: a, z };
 }
 
-/** True when any box resting on the belt crosses the light beam. Held boxes are ignored (lifted away). */
+/**
+ * True while a box physically crosses the light beam: resting on the belt, or held by the tool
+ * but not yet lifted above the beam. A gripped box still blocks until it is raised clear, so
+ * auto-feed doesn't restart the belt the moment the gripper closes.
+ */
 export function isSensorBlocked(
   c: ConveyorConfig,
   sensor: LightSensorConfig,
@@ -144,7 +151,23 @@ export function isSensorBlocked(
 ): boolean {
   if (!sensor.enabled) return false;
   const beam = conveyorExtent(c).min + sensor.offsetMm;
-  return boxes.some((b) => isOnConveyor(c, b) && Math.abs(along(c, b) - beam) <= b.size / 2);
+  const beamZ = c.topZ + SENSOR_BEAM_HEIGHT_MM;
+  return boxes.some((b) => {
+    if (Math.abs(along(c, b) - beam) > b.size / 2) return false;
+    if (isOnConveyor(c, b)) return true;
+    return (
+      Boolean(b.held) &&
+      Math.abs(acrossOffset(c, b)) <= c.widthMm / 2 + b.size / 2 &&
+      Math.abs(b.z - beamZ) <= b.size / 2
+    );
+  });
+}
+
+/** A held box still low enough over the belt to collide with boxes riding on it. */
+function isHeldObstacleOnBelt(c: ConveyorConfig, b: WorkBox, riderSize: number): boolean {
+  if (!b.held) return false;
+  const bottom = b.z - b.size / 2;
+  return bottom < c.topZ + riderSize && Math.abs(acrossOffset(c, b)) <= c.widthMm / 2 + b.size / 2;
 }
 
 /**
@@ -264,8 +287,10 @@ export function stepConveyor(
     let target = pos + delta;
     const half = box.size / 2;
     target = dir > 0 ? Math.min(target, max - half) : Math.max(target, min + half);
-    // Queue behind boxes already processed further downstream
-    for (const other of onBelt) {
+    // Queue behind boxes already processed further downstream, and behind a gripped box
+    // that hasn't been lifted clear of the belt yet.
+    const obstacles = [...onBelt, ...next.filter((o) => isHeldObstacleOnBelt(conveyor, o, box.size))];
+    for (const other of obstacles) {
       if (other === box) continue;
       const op = along(conveyor, other);
       const ahead = (op - pos) * dir > 0;
