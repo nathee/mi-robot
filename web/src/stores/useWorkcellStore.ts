@@ -59,6 +59,7 @@ interface WorkcellState extends WorkcellSnapshot {
   removePlatform: (id: string) => void;
   resetLayout: () => void;
   setSensorOffset: (offsetMm: number) => void;
+  setSensorEnabled: (enabled: boolean) => void;
   setAutoFeed: (enabled: boolean, speedPercent?: number) => void;
   setConveyorSpeedPercent: (percent: number) => void;
   moveConveyor: (distanceMm: number, absolute: boolean, feed?: number) => void;
@@ -195,11 +196,23 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   },
 
   setSensorOffset(offsetMm) {
-    set({ sensor: normalizeSensor({ offsetMm }, get().conveyor) });
+    set({ sensor: normalizeSensor({ ...get().sensor, offsetMm }, get().conveyor) });
+  },
+
+  setSensorEnabled(enabled) {
+    const s = get();
+    if (s.sensor.enabled === enabled) return;
+    if (!enabled && s.autoFeed.enabled) s.setAutoFeed(false);
+    set({ sensor: { ...s.sensor, enabled } });
+    log(enabled ? "Light sensor installed on the conveyor" : "Light sensor removed (conveyor runs without sensor)");
   },
 
   setAutoFeed(enabled, speedPercent) {
     const s = get();
+    if (enabled && !s.sensor.enabled) {
+      log("Auto feed needs the light sensor: enable it in Tools → Light Sensor", "error");
+      return;
+    }
     const autoFeed = {
       enabled,
       speedPercent: Math.max(5, Math.min(100, speedPercent ?? s.autoFeed.speedPercent)),

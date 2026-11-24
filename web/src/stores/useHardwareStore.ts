@@ -325,11 +325,18 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
 
     if (cmd.kind === "SENSOR_QUERY") {
       // A query always gets an answer, even with auto-reply off
-      if (state.connected) void get().sendRawLine(formatSensorLine(useWorkcellStore.getState().sensorBlocked));
+      const wc = useWorkcellStore.getState();
+      if (state.connected) {
+        void get().sendRawLine(wc.sensor.enabled ? formatSensorLine(wc.sensorBlocked) : "error:sensor disabled");
+      }
       return;
     }
 
     if (cmd.kind === "AUTO_FEED") {
+      if (cmd.enabled && !useWorkcellStore.getState().sensor.enabled) {
+        replyIfEnabled("error:sensor disabled");
+        return;
+      }
       useWorkcellStore.getState().setAutoFeed(cmd.enabled, cmd.speedPercent);
       replyIfEnabled("ok");
       return;

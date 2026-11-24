@@ -529,6 +529,11 @@ export const useCodeStore = create<CodeState>((set, get) => ({
 
     // Wait for the conveyor light sensor: finish as soon as the condition holds, fail on timeout
     if (step.type === "WAIT_SENSOR") {
+      if (!useWorkcellStore.getState().sensor.enabled) {
+        set({ status: "ERROR", runtime: null });
+        logCode(`${step.label}: the light sensor is disabled (Tools → Light Sensor)`, "error");
+        return;
+      }
       if (sensorConditionMet(step)) {
         nextElapsed = state.runtime.durationMs;
       } else if (nextElapsed >= state.runtime.durationMs) {

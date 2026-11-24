@@ -178,6 +178,7 @@ export class WorkcellView {
     const beam = new Mesh(new CylinderGeometry(0.9 * MM, 0.9 * MM, (w + 8) * MM, 8), this.beamMat);
     beam.position.z = beamZ * MM; // CylinderGeometry runs along Y = across the belt
     sensorGrp.add(beam);
+    sensorGrp.visible = sensor.enabled;
     conv.add(sensorGrp);
 
     this.staticGroup.add(conv);

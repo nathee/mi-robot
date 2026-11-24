@@ -64,6 +64,8 @@ export interface ConveyorRuntime {
  * it is "blocked" while a box on the belt crosses the beam.
  */
 export interface LightSensorConfig {
+  /** Sensor installed on the conveyor. When false it never detects and auto feed is unavailable. */
+  enabled: boolean;
   offsetMm: number;
 }
 
@@ -114,13 +116,16 @@ export const DEFAULT_PLATFORMS: Platform[] = [
 export const PLATFORM_COLORS = ["#64748b", "#78716c", "#0f766e", "#7c3aed"];
 
 /** Beam 2 mm in front of the end stop: the belt stops with the box (almost) touching the stop. */
-export const DEFAULT_SENSOR: LightSensorConfig = { offsetMm: 2 };
+export const DEFAULT_SENSOR: LightSensorConfig = { enabled: true, offsetMm: 2 };
 export const DEFAULT_AUTO_FEED: AutoFeedConfig = { enabled: false, speedPercent: 60 };
 
 export function normalizeSensor(s: Partial<LightSensorConfig> | undefined, c: ConveyorConfig): LightSensorConfig {
   const v = Number(s?.offsetMm);
   const offset = Number.isFinite(v) ? v : DEFAULT_SENSOR.offsetMm;
-  return { offsetMm: Math.max(0, Math.min(c.lengthMm, offset)) };
+  return {
+    enabled: s?.enabled ?? DEFAULT_SENSOR.enabled,
+    offsetMm: Math.max(0, Math.min(c.lengthMm, offset)),
+  };
 }
 
 /** World position (mm) of the sensor beam centre line on the belt. */
@@ -137,6 +142,7 @@ export function isSensorBlocked(
   sensor: LightSensorConfig,
   boxes: readonly WorkBox[]
 ): boolean {
+  if (!sensor.enabled) return false;
   const beam = conveyorExtent(c).min + sensor.offsetMm;
   return boxes.some((b) => isOnConveyor(c, b) && Math.abs(along(c, b) - beam) <= b.size / 2);
 }

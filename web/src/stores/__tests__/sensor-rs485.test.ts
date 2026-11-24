@@ -4,7 +4,10 @@ import { useWorkcellStore } from "@/stores/useWorkcellStore";
 
 describe("light sensor over RS-485", () => {
   const original = useHardwareStore.getState().sendRawLine;
-  afterEach(() => useHardwareStore.setState({ sendRawLine: original, connected: false, reportSensor: true }));
+  afterEach(() => {
+    useHardwareStore.setState({ sendRawLine: original, connected: false, reportSensor: true });
+    useWorkcellStore.getState().setSensorEnabled(true);
+  });
 
   it("pushes SENSOR=1 / SENSOR=0 on change and answers SENSOR?", () => {
     const sent: string[] = [];
@@ -40,5 +43,27 @@ describe("light sensor over RS-485", () => {
     useWorkcellStore.getState().setAutoFeed(true, 100);
     for (let i = 0; i < 400; i++) useWorkcellStore.getState().step(50);
     expect(sent.filter((l) => l.startsWith("SENSOR="))).toEqual([]);
+  });
+
+  it("sensor disabled: never detects, auto feed refused, RS-485 reports the error", () => {
+    const sent: string[] = [];
+    useHardwareStore.setState({ connected: true, sendRawLine: vi.fn(async (l: string) => void sent.push(l)) });
+    useWorkcellStore.getState().loadPreset("CONVEYOR");
+    useWorkcellStore.getState().setAutoFeed(true, 100);
+    useWorkcellStore.getState().setSensorEnabled(false);
+    expect(useWorkcellStore.getState().autoFeed.enabled).toBe(false);
+
+    useWorkcellStore.getState().setAutoFeed(true, 100);
+    expect(useWorkcellStore.getState().autoFeed.enabled).toBe(false);
+
+    // Run the belt by command all the way to the end stop: still no detection
+    useWorkcellStore.getState().setConveyorSpeedPercent(-100);
+    for (let i = 0; i < 400; i++) useWorkcellStore.getState().step(50);
+    expect(useWorkcellStore.getState().sensorBlocked).toBe(false);
+
+    useHardwareStore.getState().handleIncomingLine("@01SENSOR?");
+    expect(sent.at(-1)).toBe("error:sensor disabled");
+    useHardwareStore.getState().handleIncomingLine("@01AUTO=1");
+    expect(sent.at(-1)).toBe("error:sensor disabled");
   });
 });
