@@ -14,10 +14,13 @@ import {
   Home,
   Monitor,
   Moon,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Save,
   Sun,
 } from "lucide-react";
+import { useCodeStore } from "@/stores/useCodeStore";
 import { useHardwareStore } from "@/stores/useHardwareStore";
 import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
@@ -26,8 +29,11 @@ import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore, type ThemeMode } from "@/stores/useThemeStore";
 import { APP_NAME } from "@/lib/appConfig";
+import { useEscapeKey } from "./ui";
 
 interface ToolbarProps {
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onRequestRenameProject: () => void;
   onRequestNewProgram: () => void;
   onRequestDownloadRobot: () => void;
@@ -47,7 +53,11 @@ export function triggerTextDownload(filename: string, content: string, mime = "t
   URL.revokeObjectURL(url);
 }
 
+const THEME_CYCLE: ThemeMode[] = ["light", "dark", "auto"];
+
 export function Toolbar({
+  sidebarOpen,
+  onToggleSidebar,
   onRequestRenameProject,
   onRequestNewProgram,
   onRequestDownloadRobot,
@@ -73,12 +83,20 @@ export function Toolbar({
   const hwRxCount = useHardwareStore((s) => s.rxCount);
 
   const targetsCount = usePathStore((s) => s.targets.length);
+  const blocksCount = useCodeStore((s) => s.blocks.length);
+  const scriptNonEmpty = useCodeStore((s) => s.scriptText.trim().length > 0);
+  const gcodeNonEmpty = useCodeStore((s) => s.gcodeText.trim().length > 0);
+  const getCodeGcode = useCodeStore((s) => s.getExportableGcode);
   const importProgramText = usePathStore((s) => s.importProgramText);
   const exportJsonString = usePathStore((s) => s.exportJsonString);
   const exportGcodeString = usePathStore((s) => s.exportGcodeString);
   const cancelPath = usePathStore((s) => s.cancelForManualControl);
   const setHome = useRobotStore((s) => s.setHome);
   const appendLog = useSerialStore((s) => s.appendLog);
+
+  const hasExportableGcode = targetsCount > 0 || blocksCount > 0 || scriptNonEmpty || gcodeNonEmpty;
+
+  useEscapeKey(fileMenuOpen, () => setFileMenuOpen(false));
 
   useEffect(() => {
     if (!fileMenuOpen) return;
@@ -99,10 +117,15 @@ export function Toolbar({
   const handleSaveFile = (fmt: "json" | "gcode") => {
     setFileMenuOpen(false);
     if (fmt === "gcode") {
-      triggerTextDownload(`${safeSlug}.gcode`, exportGcodeString(), "text/plain");
+      const content = targetsCount > 0 ? exportGcodeString() : getCodeGcode();
+      if (!content) {
+        appendLog({ dir: "error", text: "[EXPORT] Nothing valid to export as G-code." });
+        return;
+      }
+      triggerTextDownload(`${safeSlug}.gcode`, content, "text/plain");
       setFileMeta({ fileName: safeSlug, fileFormat: "gcode", dirty: false });
       saveToHistory("Exported G-code");
-      appendLog({ dir: "ok", text: `[PATH] Exported ${safeSlug}.gcode` });
+      appendLog({ dir: "ok", text: `[EXPORT] Saved ${safeSlug}.gcode` });
     } else {
       triggerTextDownload(`${safeSlug}.json`, exportJsonString(), "application/json");
       setFileMeta({ fileName: safeSlug, fileFormat: "json", dirty: false });
@@ -128,34 +151,41 @@ export function Toolbar({
     }
   };
 
+  const cycleTheme = () => {
+    const idx = THEME_CYCLE.indexOf(themeMode);
+    const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+    setThemeMode(next);
+  };
+
+  const ThemeIcon = themeMode === "light" ? Sun : themeMode === "dark" ? Moon : Monitor;
+  const themeLabel =
+    themeMode === "light" ? "Light theme" : themeMode === "dark" ? "Dark theme" : "Auto theme";
+
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-slate-200/90 bg-white px-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900/95">
       {/* Left: Brand & Editable Project Title */}
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs">
             <Bot className="h-4 w-4" />
           </div>
           <span
-            className="max-w-[16rem] truncate text-sm font-bold tracking-wide text-slate-900 dark:text-white"
+            className="hidden max-w-[14rem] truncate text-sm font-bold tracking-tight text-slate-900 sm:inline dark:text-white"
             title={APP_NAME}
           >
             {APP_NAME}
           </span>
-          <span className="hidden rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 sm:inline dark:bg-slate-800 dark:text-slate-400">
-            6-DOF SIM
-          </span>
         </div>
 
-        <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
+        <div className="hidden h-4 w-px bg-slate-200 sm:block dark:bg-slate-800" />
 
         <button
           type="button"
           onClick={onRequestRenameProject}
           title="Click to rename project"
-          className="group inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+          className="group inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
         >
-          <span className="max-w-44 truncate">{projectName}</span>
+          <span className="max-w-32 truncate sm:max-w-44">{projectName}</span>
           {dirty ? (
             <span
               className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
@@ -164,11 +194,11 @@ export function Toolbar({
           ) : (
             <Check className="h-3 w-3 shrink-0 text-emerald-500" aria-label="Saved" />
           )}
-          <Pencil className="h-3 w-3 text-slate-400 opacity-50 transition group-hover:opacity-100" />
+          <Pencil className="h-3 w-3 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
         </button>
       </div>
 
-      {/* Right: Save, History, Program File Menu, Home & Theme */}
+      {/* Right: Cleanly Grouped Actions */}
       <div className="flex items-center gap-1.5">
         <input
           ref={fileInputRef}
@@ -178,76 +208,84 @@ export function Toolbar({
           onChange={handleFileChange}
         />
 
-        {/* ESP32 / RS485 Live Link Button */}
+        {/* Hardware / RS485 Link */}
         <button
           type="button"
           onClick={onRequestOpenHardware}
-          title="Connect USB-RS485 or ESP32 Wi-Fi to drive the virtual robot"
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+          title="Connect USB-RS485 or ESP32 Wi-Fi"
+          className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
             hwConnected
-              ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-300"
-              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
+              : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           }`}
         >
           <span
-            className={`h-2 w-2 rounded-full ${
+            className={`h-1.5 w-1.5 rounded-full ${
               hwConnected ? "animate-pulse bg-emerald-500" : "bg-slate-400"
             }`}
           />
           <Cable className="h-3.5 w-3.5" />
           <span className="hidden lg:inline">RS485</span>
           {hwConnected && hwRxCount > 0 && (
-            <span className="font-mono text-[10px] opacity-80">{hwRxCount}</span>
+            <span className="font-mono text-[10px] tabular-nums opacity-80">{hwRxCount}</span>
           )}
         </button>
 
-        {/* Quick Save Snapshot (Ctrl+S) */}
+        {/* Save & History */}
         <button
           type="button"
           onClick={() => saveToHistory("Manual save")}
           title="Save snapshot to Work History (Ctrl+S)"
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+          className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
             dirty
-              ? "border-amber-500/40 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
-              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              ? "border-amber-500/40 bg-amber-500/12 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+              : "border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           }`}
         >
           <Save className="h-3.5 w-3.5" />
-          <span className="hidden md:inline">{dirty ? "Save*" : "Saved"}</span>
+          <span className="hidden md:inline">{dirty ? "Save" : "Saved"}</span>
         </button>
 
-        {/* Work History Modal Trigger */}
         <button
           type="button"
           onClick={onRequestOpenHistory}
-          title="View and restore previous saved work"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          title="Work History — view and restore snapshots"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
-          <Clock className="h-3.5 w-3.5 text-sky-500" />
-          <span className="hidden md:inline">History</span>
+          <Clock className="h-3.5 w-3.5" />
           {historyCount > 0 && (
-            <span className="rounded-full bg-sky-500/15 px-1.5 font-mono text-[10px] font-bold text-sky-600 dark:text-sky-400">
+            <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               {historyCount}
             </span>
           )}
         </button>
 
-        {/* File Menu Dropdown */}
+        {/* File / Program Menu */}
         <div ref={menuRef} className="relative">
           <button
             type="button"
+            aria-expanded={fileMenuOpen}
+            aria-haspopup="menu"
             onClick={() => setFileMenuOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
+              fileMenuOpen
+                ? "border-slate-300 bg-slate-100 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                : "border-slate-200/80 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-200 dark:hover:bg-slate-800"
+            }`}
           >
             <FolderOpen className="h-3.5 w-3.5 text-sky-500" />
             <span className="hidden sm:inline">Program</span>
-            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+            <ChevronDown className={`h-3.5 w-3.5 opacity-60 transition-transform ${fileMenuOpen ? "rotate-180" : ""}`} />
           </button>
 
           {fileMenuOpen && (
-            <div className="absolute right-0 z-40 mt-1.5 w-52 rounded-xl border border-slate-200 bg-white p-1.5 text-xs shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div
+              role="menu"
+              className="animate-ui-in absolute right-0 z-40 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white p-1.5 text-xs shadow-xl dark:border-slate-700/80 dark:bg-slate-900"
+            >
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setFileMenuOpen(false);
                   onRequestNewProgram();
@@ -255,10 +293,11 @@ export function Toolbar({
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FilePlus2 className="h-3.5 w-3.5 text-slate-400" />
-                New Program
+                <span className="flex-1">New Program</span>
               </button>
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => {
                   setFileMenuOpen(false);
                   fileInputRef.current?.click();
@@ -266,29 +305,32 @@ export function Toolbar({
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FolderOpen className="h-3.5 w-3.5 text-slate-400" />
-                Open JSON / G-code...
+                <span className="flex-1">Open JSON / G-code…</span>
               </button>
               <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => handleSaveFile("json")}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Save className="h-3.5 w-3.5 text-slate-400" />
-                Download Project (.json)
+                <span className="flex-1">Download Project (.json)</span>
               </button>
               <button
                 type="button"
-                disabled={targetsCount === 0}
+                role="menuitem"
+                disabled={!hasExportableGcode}
                 onClick={() => handleSaveFile("gcode")}
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FileCode2 className="h-3.5 w-3.5 text-slate-400" />
-                Export WLKATA G-code
+                <span className="flex-1">Export WLKATA G-code</span>
               </button>
               <button
                 type="button"
-                disabled={targetsCount === 0}
+                role="menuitem"
+                disabled={!hasExportableGcode}
                 onClick={() => {
                   setFileMenuOpen(false);
                   onRequestDownloadRobot();
@@ -296,54 +338,57 @@ export function Toolbar({
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-medium text-sky-600 hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-950/50"
               >
                 <Download className="h-3.5 w-3.5" />
-                Send to Robot (USB / File)
+                <span className="flex-1">Send to Robot (USB / File)</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* Instant Home Button */}
+        <div className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-800" />
+
+        {/* Primary Home Action */}
         <button
           type="button"
           onClick={() => {
             cancelPath();
             setHome();
           }}
-          title="Return robot to Home position (0,0,0,0,0,0)"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500"
+          title="Return robot to Home position (0, 0, 0, 0, 0, 0)"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-sky-600 px-3 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500"
         >
           <Home className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Home</span>
         </button>
 
-        {/* Clean Icon Theme Toggle */}
-        <div
-          className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800"
-          role="group"
-          aria-label="Theme mode"
+        {/* Compact Theme Toggle (single clean button cycling Light / Dark / Auto) */}
+        <button
+          type="button"
+          onClick={cycleTheme}
+          title={`${themeLabel} — click to switch`}
+          aria-label={`${themeLabel} — click to switch`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
         >
-          {(
-            [
-              { mode: "light", icon: Sun, title: "Light theme" },
-              { mode: "dark", icon: Moon, title: "Dark theme" },
-              { mode: "auto", icon: Monitor, title: "Auto theme (by time of day)" },
-            ] as Array<{ mode: ThemeMode; icon: typeof Sun; title: string }>
-          ).map(({ mode, icon: Icon, title }) => (
-            <button
-              key={mode}
-              type="button"
-              title={title}
-              onClick={() => setThemeMode(mode)}
-              className={`rounded-md p-1.5 transition ${
-                themeMode === mode
-                  ? "bg-white text-sky-600 shadow-xs dark:bg-slate-900 dark:text-sky-400"
-                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-            </button>
-          ))}
-        </div>
+          <ThemeIcon className="h-4 w-4" />
+        </button>
+
+        {/* Sidebar Collapse / Expand Toggle */}
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          title={sidebarOpen ? "Hide control panel (Ctrl+B)" : "Show control panel (Ctrl+B)"}
+          aria-label={sidebarOpen ? "Hide control panel" : "Show control panel"}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition ${
+            sidebarOpen
+              ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              : "bg-sky-500/15 text-sky-600 hover:bg-sky-500/25 dark:text-sky-400"
+          }`}
+        >
+          {sidebarOpen ? (
+            <PanelRightClose className="h-4 w-4" />
+          ) : (
+            <PanelRightOpen className="h-4 w-4" />
+          )}
+        </button>
       </div>
     </header>
   );

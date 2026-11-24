@@ -26,16 +26,32 @@
     -webkit-user-select: text !important;
     user-select: text !important;
   }
+
+  button:not(:disabled),
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Hide browser number spinners on compact numeric fields */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 /* Slim robotics-studio scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
 }
 
 .dark * {
-  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -48,30 +64,35 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.4);
+  background-color: rgba(148, 163, 184, 0.36);
   border-radius: 9999px;
 }
 
 .dark *::-webkit-scrollbar-thumb {
-  background-color: rgba(100, 116, 139, 0.45);
+  background-color: rgba(100, 116, 139, 0.42);
 }
 
 /* Custom range slider */
 input[type="range"].sim-slider {
   -webkit-appearance: none;
   appearance: none;
+  height: 16px;
   background: transparent;
   cursor: pointer;
 }
 
+input[type="range"].sim-slider:focus-visible {
+  outline: none;
+}
+
 input[type="range"].sim-slider::-webkit-slider-runnable-track {
-  height: 6px;
+  height: 5px;
   border-radius: 9999px;
   background: rgba(148, 163, 184, 0.35);
 }
 
 .dark input[type="range"].sim-slider::-webkit-slider-runnable-track {
-  background: rgba(71, 85, 105, 0.65);
+  background: rgba(71, 85, 105, 0.6);
 }
 
 input[type="range"].sim-slider::-webkit-slider-thumb {
@@ -80,11 +101,11 @@ input[type="range"].sim-slider::-webkit-slider-thumb {
   height: 14px;
   width: 14px;
   border-radius: 9999px;
-  background: #3b82f6;
+  background: #0ea5e9;
   border: 2px solid #ffffff;
-  margin-top: -4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform 0.1s ease;
+  margin-top: -4.5px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .dark input[type="range"].sim-slider::-webkit-slider-thumb {
@@ -92,10 +113,54 @@ input[type="range"].sim-slider::-webkit-slider-thumb {
 }
 
 input[type="range"].sim-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scale(1.14);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.18);
+}
+
+input[type="range"].sim-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.32);
+}
+
+input[type="range"].sim-slider::-moz-range-track {
+  height: 5px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.dark input[type="range"].sim-slider::-moz-range-track {
+  background: rgba(71, 85, 105, 0.6);
+}
+
+input[type="range"].sim-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: #0ea5e9;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  transition: transform 0.12s ease;
+}
+
+.dark input[type="range"].sim-slider::-moz-range-thumb {
+  border-color: #0f172a;
 }
 
 input[type="range"].sim-slider:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-ui-in {
+  animation: ui-fade-in 0.14s cubic-bezier(0.16, 1, 0.3, 1);
 }

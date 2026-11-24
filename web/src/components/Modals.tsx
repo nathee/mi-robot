@@ -6,6 +6,7 @@ import {
   formatRelativeTime,
   type WorkspaceHistoryEntry,
 } from "@/lib/storage/workspaceStorage";
+import { useEscapeKey } from "./ui";
 
 interface TextPromptModalProps {
   open: boolean;
@@ -28,6 +29,8 @@ function TextPromptModalInner({
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState("");
 
+  useEscapeKey(true, onClose);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = value.trim();
@@ -41,19 +44,23 @@ function TextPromptModalInner({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="animate-ui-in w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700/80 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <button
             type="button"
+            aria-label="Close"
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
             <X className="h-4 w-4" />
           </button>
@@ -75,13 +82,13 @@ function TextPromptModalInner({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+              className="rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
             >
               {confirmLabel}
             </button>
@@ -116,23 +123,25 @@ export function ConfirmModal({
   onConfirm,
   onClose,
 }: ConfirmModalProps) {
+  useEscapeKey(open, onClose);
   if (!open) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="animate-ui-in w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700/80 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
           <div
-            className={`mt-0.5 rounded-lg p-2 ${
-              danger
-                ? "bg-rose-500/10 text-rose-500"
-                : "bg-amber-500/10 text-amber-500"
+            className={`mt-0.5 rounded-xl p-2 ${
+              danger ? "bg-rose-500/12 text-rose-500" : "bg-amber-500/12 text-amber-500"
             }`}
           >
             <AlertTriangle className="h-4 w-4" />
@@ -148,7 +157,7 @@ export function ConfirmModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancel
           </button>
@@ -158,7 +167,7 @@ export function ConfirmModal({
               onConfirm();
               onClose();
             }}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white ${
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white transition ${
               danger ? "bg-rose-600 hover:bg-rose-500" : "bg-sky-600 hover:bg-sky-500"
             }`}
           >
@@ -174,24 +183,25 @@ interface DownloadRobotModalProps {
   open: boolean;
   gcodePreview: string;
   targetCount: number;
+  sourceLabel?: string;
   onDownloadGcode: () => void;
   onSendWebSerial: () => Promise<void>;
   onClose: () => void;
 }
 
-export function DownloadRobotModal({
-  open,
+function DownloadRobotModalInner({
   gcodePreview,
   targetCount,
+  sourceLabel = "targets",
   onDownloadGcode,
   onSendWebSerial,
   onClose,
-}: DownloadRobotModalProps) {
+}: Omit<DownloadRobotModalProps, "open">) {
   const [sending, setSending] = useState(false);
   const [serialError, setSerialError] = useState("");
   const hasWebSerial = typeof navigator !== "undefined" && "serial" in navigator;
 
-  if (!open) return null;
+  useEscapeKey(true, onClose);
 
   const handleSerial = async () => {
     setSending(true);
@@ -208,36 +218,39 @@ export function DownloadRobotModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Send Program to Robot"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="animate-ui-in w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700/80 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Download Program to Robot ({targetCount} targets)
+            Send Program to Robot ({targetCount} {sourceLabel})
           </h3>
           <button
             type="button"
+            aria-label="Close"
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Preview generated WLKATA G-code below. You can save it as a <code>.gcode</code> file or
-          stream directly to a connected WLKATA Mirobot over USB Web Serial (115200 baud).
+          Save as a <code>.gcode</code> file or stream directly over USB Web Serial (115200 baud).
         </p>
 
-        <pre className="selectable mt-3 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-emerald-400 dark:border-slate-800">
-          {gcodePreview || "; No targets taught yet"}
+        <pre className="selectable mt-3 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-emerald-400 dark:border-slate-800">
+          {gcodePreview || "; No commands generated yet"}
         </pre>
 
         {serialError && (
-          <p className="mt-2 rounded-md bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-500">
+          <p className="mt-2 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-xs text-rose-500">
             {serialError}
           </p>
         )}
@@ -246,7 +259,7 @@ export function DownloadRobotModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Close
           </button>
@@ -257,10 +270,10 @@ export function DownloadRobotModal({
               onDownloadGcode();
               onClose();
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-600 hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
           >
             <Download className="h-3.5 w-3.5" />
-            Save .gcode File
+            Save .gcode
           </button>
           <button
             type="button"
@@ -271,15 +284,20 @@ export function DownloadRobotModal({
                 ? "Connect to WLKATA Mirobot via Web Serial (115200 baud)"
                 : "Web Serial API is only supported in Chromium-based browsers"
             }
-            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:opacity-40"
           >
             <Usb className="h-3.5 w-3.5" />
-            {sending ? "Sending..." : "Stream via USB Serial"}
+            {sending ? "Sending…" : "Stream via USB"}
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+export function DownloadRobotModal(props: DownloadRobotModalProps) {
+  if (!props.open) return null;
+  return <DownloadRobotModalInner {...props} />;
 }
 
 interface HistoryModalProps {
@@ -293,8 +311,7 @@ interface HistoryModalProps {
   onClose: () => void;
 }
 
-export function HistoryModal({
-  open,
+function HistoryModalInner({
   entries,
   isDirty,
   onSaveNow,
@@ -302,10 +319,10 @@ export function HistoryModal({
   onDelete,
   onClearAll,
   onClose,
-}: HistoryModalProps) {
+}: Omit<HistoryModalProps, "open">) {
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
 
-  if (!open) return null;
+  useEscapeKey(true, onClose);
 
   const handleRestoreClick = (id: string) => {
     if (isDirty) {
@@ -318,11 +335,14 @@ export function HistoryModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Work History"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[82vh] w-full max-w-lg flex-col rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="animate-ui-in flex max-h-[82vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700/80 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -335,8 +355,9 @@ export function HistoryModal({
           </div>
           <button
             type="button"
+            aria-label="Close"
             onClick={onClose}
-            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
             <X className="h-4 w-4" />
           </button>
@@ -345,24 +366,24 @@ export function HistoryModal({
         {/* Action Strip */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-950/50">
           <span className="text-slate-500 dark:text-slate-400">
-            Your workspace auto-saves locally on every change.
+            Auto-saved locally on every change.
           </span>
           <button
             type="button"
             onClick={onSaveNow}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-500"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
           >
             <Save className="h-3.5 w-3.5" />
             Save Snapshot
           </button>
         </div>
 
-        {/* Unsaved Confirmation Banner inside modal */}
+        {/* Unsaved Confirmation Banner */}
         {confirmRestoreId && (
-          <div className="mx-5 mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
-            <p className="font-semibold">You have unsaved changes in the current project.</p>
+          <div className="mx-5 mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+            <p className="font-semibold">You have unsaved changes.</p>
             <p className="mt-0.5 text-[11px] opacity-90">
-              Save a snapshot of your current work before restoring, or discard and restore now?
+              Save a snapshot before restoring, or discard current edits?
             </p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               <button
@@ -373,9 +394,9 @@ export function HistoryModal({
                   setConfirmRestoreId(null);
                   onClose();
                 }}
-                className="rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
+                className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
               >
-                Save Current & Restore
+                Save &amp; Restore
               </button>
               <button
                 type="button"
@@ -384,14 +405,14 @@ export function HistoryModal({
                   setConfirmRestoreId(null);
                   onClose();
                 }}
-                className="rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500"
+                className="rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500"
               >
-                Discard & Restore
+                Discard &amp; Restore
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmRestoreId(null)}
-                className="rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
@@ -403,11 +424,11 @@ export function HistoryModal({
         <div className="flex-1 space-y-2 overflow-y-auto p-5">
           {entries.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-400 dark:border-slate-700">
-              No saved snapshots yet. Click <strong>Save Snapshot</strong> (or press{" "}
+              No snapshots yet. Click <strong>Save Snapshot</strong> or press{" "}
               <kbd className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[10px] text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 Ctrl+S
               </kbd>
-              ) to store a version you can return to anytime.
+              .
             </div>
           ) : (
             entries.map((entry) => {
@@ -416,7 +437,7 @@ export function HistoryModal({
               return (
                 <div
                   key={entry.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 transition hover:border-sky-400/60 dark:border-slate-800 dark:bg-slate-950/60"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white p-3 transition hover:border-sky-400/60 dark:border-slate-800 dark:bg-slate-950/60"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -427,12 +448,12 @@ export function HistoryModal({
                         {entry.note}
                       </span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                       <span>{formatRelativeTime(entry.savedAt)}</span>
                       <span>·</span>
                       <span className="font-mono text-[10px]">{dateStr}</span>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-1.5 font-mono text-[10px] text-slate-500">
+                    <div className="mt-1.5 flex flex-wrap gap-1.5 font-mono text-[10px] text-slate-500">
                       <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-sky-600 dark:text-sky-400">
                         {entry.data.pathTargets.length} waypoints
                       </span>
@@ -449,7 +470,7 @@ export function HistoryModal({
                     <button
                       type="button"
                       onClick={() => handleRestoreClick(entry.id)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-600 hover:bg-sky-500/20 dark:text-sky-400"
+                      className="inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
                     >
                       <RotateCcw className="h-3 w-3" />
                       Restore
@@ -458,7 +479,8 @@ export function HistoryModal({
                       type="button"
                       onClick={() => onDelete(entry.id)}
                       title="Delete snapshot"
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/50"
+                      aria-label={`Delete snapshot ${entry.data.projectName}`}
+                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/50"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -475,14 +497,14 @@ export function HistoryModal({
             type="button"
             disabled={entries.length === 0}
             onClick={onClearAll}
-            className="text-xs font-medium text-rose-500 hover:text-rose-400 disabled:opacity-40"
+            className="text-xs font-medium text-rose-500 transition hover:text-rose-400 disabled:opacity-40"
           >
             Clear History
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Close
           </button>
@@ -490,4 +512,9 @@ export function HistoryModal({
       </div>
     </div>
   );
+}
+
+export function HistoryModal(props: HistoryModalProps) {
+  if (!props.open) return null;
+  return <HistoryModalInner {...props} />;
 }

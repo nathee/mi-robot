@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCodeStore } from "@/stores/useCodeStore";
 import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
@@ -26,7 +26,8 @@ export function SimulatorShell() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const mainRowRef = useRef<HTMLDivElement | null>(null);
 
-  const [sidebarWidthPx, setSidebarWidthPx] = useState(340);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidthPx, setSidebarWidthPx] = useState(348);
   const [consoleExpanded, setConsoleExpanded] = useState(false);
   const [consoleHeightPx, setConsoleHeightPx] = useState(170);
   const [draggingSplit, setDraggingSplit] = useState<"sidebar" | "console" | null>(null);
@@ -44,6 +45,15 @@ export function SimulatorShell() {
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [hardwareModalOpen, setHardwareModalOpen] = useState(false);
 
+  const anyModalOpen =
+    renameProjectOpen ||
+    renameTargetState.open ||
+    confirmClearOpen ||
+    confirmNewOpen ||
+    downloadModalOpen ||
+    historyModalOpen ||
+    hardwareModalOpen;
+
   const projectName = useProjectStore((s) => s.name);
   const dirty = useProjectStore((s) => s.dirty);
   const setProjectName = useProjectStore((s) => s.setName);
@@ -54,6 +64,7 @@ export function SimulatorShell() {
   const clearHistory = useHistoryStore((s) => s.clearHistory);
   const targets = usePathStore((s) => s.targets);
   const exportGcodeString = usePathStore((s) => s.exportGcodeString);
+  const getCodeGcode = useCodeStore((s) => s.getExportableGcode);
   const newProgram = usePathStore((s) => s.newProgram);
   const clearTargets = usePathStore((s) => s.clearTargets);
   const renameTarget = usePathStore((s) => s.renameTarget);
@@ -100,41 +111,46 @@ export function SimulatorShell() {
     };
   }, []);
 
-  // Global Keyboard Shortcuts (including Ctrl+S to save snapshot)
+  // Global Keyboard Shortcuts (Ctrl+S save, Ctrl+B toggle panel, Path shortcuts)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === "s") {
+      const key = e.key.toLowerCase();
+
+      if (mod && key === "s") {
         e.preventDefault();
         useHistoryStore.getState().saveToHistory("Ctrl+S save");
         return;
       }
 
-      if (isEditableTarget(e.target)) return;
+      if (mod && key === "b") {
+        e.preventDefault();
+        setSidebarOpen((v) => !v);
+        return;
+      }
+
+      if (anyModalOpen || isEditableTarget(e.target)) return;
       const path = usePathStore.getState();
 
-      if (mod && e.key.toLowerCase() === "i") {
+      if (mod && key === "i") {
         e.preventDefault();
         path.teachTarget();
-      } else if (mod && e.key.toLowerCase() === "c") {
+      } else if (mod && key === "c") {
         if (path.activeTargetIndex >= 0) {
           e.preventDefault();
           path.copySelectedTarget();
         }
-      } else if (mod && e.key.toLowerCase() === "v") {
+      } else if (mod && key === "v") {
         if (path.clipboard) {
           e.preventDefault();
           path.pasteTarget();
         }
-      } else if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) {
+      } else if (mod && key === "z" && !e.shiftKey) {
         if (path.undoStack.length) {
           e.preventDefault();
           path.undo();
         }
-      } else if (
-        (mod && e.key.toLowerCase() === "y") ||
-        (mod && e.shiftKey && e.key.toLowerCase() === "z")
-      ) {
+      } else if ((mod && key === "y") || (mod && e.shiftKey && key === "z")) {
         if (path.redoStack.length) {
           e.preventDefault();
           path.redo();
@@ -149,17 +165,20 @@ export function SimulatorShell() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [anyModalOpen]);
 
   // Split pane pointer dragging
   useEffect(() => {
     if (!draggingSplit) return;
 
+    const prevCursor = document.body.style.cursor;
+    document.body.style.cursor = draggingSplit === "sidebar" ? "col-resize" : "row-resize";
+
     const onMove = (e: PointerEvent) => {
       if (draggingSplit === "sidebar" && mainRowRef.current) {
         const rect = mainRowRef.current.getBoundingClientRect();
         const rightWidth = rect.right - e.clientX;
-        setSidebarWidthPx(Math.min(480, Math.max(290, Math.round(rightWidth))));
+        setSidebarWidthPx(Math.min(500, Math.max(300, Math.round(rightWidth))));
       } else if (draggingSplit === "console" && workspaceRef.current) {
         const rect = workspaceRef.current.getBoundingClientRect();
         const h = rect.bottom - e.clientY;
@@ -170,9 +189,12 @@ export function SimulatorShell() {
     const onUp = () => setDraggingSplit(null);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
+      document.body.style.cursor = prevCursor;
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
   }, [draggingSplit]);
 
@@ -183,6 +205,19 @@ export function SimulatorShell() {
       newProgram();
     }
   };
+
+  // Resolve exportable G-code: prefer Path waypoints when present, otherwise Code program
+  const resolvedGcode = (() => {
+    if (targets.length > 0) {
+      return { source: "path" as const, gcode: exportGcodeString(), count: targets.length };
+    }
+    const codeGcode = downloadModalOpen ? getCodeGcode() : null;
+    if (codeGcode) {
+      const lineCount = codeGcode.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith(";")).length;
+      return { source: "code" as const, gcode: codeGcode, count: lineCount };
+    }
+    return { source: "path" as const, gcode: "", count: 0 };
+  })();
 
   const handleSendWebSerial = async () => {
     const nav = navigator as Navigator & {
@@ -199,7 +234,7 @@ export function SimulatorShell() {
     }
     const port = await nav.serial.requestPort({ filters: [{ usbVendorId: 0x1a86 }] });
     await port.open({ baudRate: 115200 });
-    const gcode = exportGcodeString();
+    const gcode = resolvedGcode.gcode;
     const lines = gcode
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -230,6 +265,8 @@ export function SimulatorShell() {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <Toolbar
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
         onRequestRenameProject={() => setRenameProjectOpen(true)}
         onRequestNewProgram={handleRequestNewProgram}
         onRequestDownloadRobot={() => setDownloadModalOpen(true)}
@@ -248,41 +285,38 @@ export function SimulatorShell() {
             <ViewerCanvas />
           </div>
 
-          {/* Horizontal Resizer (Desktop) */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize workspace and control sidebar"
-            tabIndex={0}
-            onPointerDown={() => setDraggingSplit("sidebar")}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowLeft") setSidebarWidthPx((w) => Math.min(480, w + 16));
-              if (e.key === "ArrowRight") setSidebarWidthPx((w) => Math.max(290, w - 16));
-            }}
-            className={`hidden w-1 shrink-0 cursor-col-resize bg-slate-200 transition hover:bg-sky-500/70 md:block dark:bg-slate-800 ${
-              draggingSplit === "sidebar" ? "bg-sky-500" : ""
-            }`}
-          />
+          {sidebarOpen && (
+            <>
+              {/* Horizontal Resizer (Desktop) */}
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize workspace and control sidebar"
+                tabIndex={0}
+                onPointerDown={() => setDraggingSplit("sidebar")}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowLeft") setSidebarWidthPx((w) => Math.min(500, w + 16));
+                  if (e.key === "ArrowRight") setSidebarWidthPx((w) => Math.max(300, w - 16));
+                }}
+                className={`hidden w-1 shrink-0 cursor-col-resize bg-slate-200/90 transition hover:bg-sky-500/70 md:block dark:bg-slate-800 ${
+                  draggingSplit === "sidebar" ? "bg-sky-500" : ""
+                }`}
+              />
 
-          {/* Right Control Sidebar */}
-          <div className="h-72 shrink-0 overflow-hidden md:h-full">
-            <div className="hidden h-full md:block" style={{ width: `${sidebarWidthPx}px` }}>
-              <ControlSidebar
-                onRequestRenameTarget={(index, name) =>
-                  setRenameTargetState({ open: true, index, name })
-                }
-                onRequestClearTargets={() => setConfirmClearOpen(true)}
-              />
-            </div>
-            <div className="h-full md:hidden">
-              <ControlSidebar
-                onRequestRenameTarget={(index, name) =>
-                  setRenameTargetState({ open: true, index, name })
-                }
-                onRequestClearTargets={() => setConfirmClearOpen(true)}
-              />
-            </div>
-          </div>
+              {/* Single Mounted Right Control Sidebar */}
+              <div
+                style={{ "--sidebar-w": `${sidebarWidthPx}px` } as CSSProperties}
+                className="h-72 w-full shrink-0 overflow-hidden md:h-full md:w-[var(--sidebar-w)]"
+              >
+                <ControlSidebar
+                  onRequestRenameTarget={(index, name) =>
+                    setRenameTargetState({ open: true, index, name })
+                  }
+                  onRequestClearTargets={() => setConfirmClearOpen(true)}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Vertical Resizer (only when console is expanded) */}
@@ -293,7 +327,11 @@ export function SimulatorShell() {
             aria-label="Resize console height"
             tabIndex={0}
             onPointerDown={() => setDraggingSplit("console")}
-            className={`flex h-1.5 shrink-0 cursor-row-resize items-center justify-center bg-slate-200 transition hover:bg-sky-500/60 dark:bg-slate-800 ${
+            onKeyDown={(e) => {
+              if (e.key === "ArrowUp") setConsoleHeightPx((h) => Math.min(360, h + 16));
+              if (e.key === "ArrowDown") setConsoleHeightPx((h) => Math.max(100, h - 16));
+            }}
+            className={`flex h-1 shrink-0 cursor-row-resize items-center justify-center bg-slate-200/90 transition hover:bg-sky-500/70 dark:bg-slate-800 ${
               draggingSplit === "console" ? "bg-sky-500" : ""
             }`}
           />
@@ -302,7 +340,9 @@ export function SimulatorShell() {
         {/* Collapsible Bottom Console */}
         <div
           style={{ height: consoleExpanded ? `${consoleHeightPx}px` : "36px" }}
-          className="shrink-0 overflow-hidden transition-[height] duration-150"
+          className={`shrink-0 overflow-hidden ${
+            draggingSplit === "console" ? "" : "transition-[height] duration-150"
+          }`}
         >
           <SerialConsole
             expanded={consoleExpanded}
@@ -377,11 +417,12 @@ export function SimulatorShell() {
 
       <DownloadRobotModal
         open={downloadModalOpen}
-        gcodePreview={exportGcodeString()}
-        targetCount={targets.length}
+        gcodePreview={resolvedGcode.gcode}
+        targetCount={resolvedGcode.count}
+        sourceLabel={resolvedGcode.source === "code" ? "Code commands" : "waypoints"}
         onDownloadGcode={() => {
-          triggerTextDownload(`${safeSlug}.gcode`, exportGcodeString(), "text/plain");
-          appendLog({ dir: "ok", text: `[PATH] Exported ${safeSlug}.gcode` });
+          triggerTextDownload(`${safeSlug}.gcode`, resolvedGcode.gcode, "text/plain");
+          appendLog({ dir: "ok", text: `[ROBOT] Exported ${safeSlug}.gcode` });
         }}
         onSendWebSerial={handleSendWebSerial}
         onClose={() => setDownloadModalOpen(false)}

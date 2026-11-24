@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   Hand,
   Layers,
   Move,
@@ -20,19 +22,20 @@ import {
 import { TOOL_DEFS, toolCodeFor } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useViewerStore, type FrameAxesVisibility } from "@/stores/useViewerStore";
+import { ToggleSwitch, useEscapeKey } from "./ui";
 
 const AXIS_BADGE_COLORS: Record<"x" | "y" | "z", { pos: string; neg: string }> = {
   x: {
-    pos: "bg-rose-500 text-white border-rose-300",
-    neg: "bg-rose-950/80 text-rose-300 border-rose-500/50",
+    pos: "bg-rose-500 text-white border-rose-300/80",
+    neg: "bg-rose-500/15 text-rose-600 border-rose-400/50 dark:bg-rose-950/80 dark:text-rose-300",
   },
   y: {
-    pos: "bg-emerald-500 text-white border-emerald-300",
-    neg: "bg-emerald-950/80 text-emerald-300 border-emerald-500/50",
+    pos: "bg-emerald-500 text-white border-emerald-300/80",
+    neg: "bg-emerald-500/15 text-emerald-700 border-emerald-400/50 dark:bg-emerald-950/80 dark:text-emerald-300",
   },
   z: {
-    pos: "bg-sky-500 text-white border-sky-300",
-    neg: "bg-sky-950/80 text-sky-300 border-sky-500/50",
+    pos: "bg-sky-500 text-white border-sky-300/80",
+    neg: "bg-sky-500/15 text-sky-700 border-sky-400/50 dark:bg-sky-950/80 dark:text-sky-300",
   },
 };
 
@@ -41,6 +44,7 @@ export function ViewerCanvas() {
   const engineRef = useRef<MirobotSceneEngine | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [openPopover, setOpenPopover] = useState<"layers" | "light" | null>(null);
+  const [showAdvancedLayers, setShowAdvancedLayers] = useState(false);
   const [gizmoProj, setGizmoProj] = useState<ViewGizmoProjection | null>(null);
   const gizmoDragRef = useRef<{ active: boolean; lastX: number; lastY: number }>({
     active: false,
@@ -55,6 +59,8 @@ export function ViewerCanvas() {
   const setGripper = useRobotStore((s) => s.setGripper);
   const toolType = useRobotStore((s) => s.toolType);
   const toolDef = TOOL_DEFS[toolType];
+
+  useEscapeKey(openPopover !== null, () => setOpenPopover(null));
 
   useEffect(() => {
     const host = hostRef.current;
@@ -90,7 +96,7 @@ export function ViewerCanvas() {
 
   return (
     <div
-      className="relative h-full w-full overflow-hidden bg-[#121417]"
+      className="relative h-full w-full overflow-hidden bg-[#cfd9df] dark:bg-[#121417]"
       onPointerDown={() => {
         if (openPopover) setOpenPopover(null);
       }}
@@ -100,20 +106,20 @@ export function ViewerCanvas() {
 
       {/* Loading Indicator */}
       {!loaded && (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs">
-          <div className="flex items-center gap-2.5 rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-2.5 text-xs font-medium text-slate-200 shadow-lg">
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/45 backdrop-blur-xs">
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/90 px-4 py-2.5 text-xs font-medium text-slate-200 shadow-lg">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
-            Loading 6-DOF Mirobot 3D models...
+            Loading 6-DOF Mirobot 3D models…
           </div>
         </div>
       )}
 
-      {/* Top-Left: Simple 3D Interaction Mode Pill */}
+      {/* Top-Left: Clean 3D Mode Switcher (stacks IK solver below to prevent overlap) */}
       <div
-        className="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-2"
+        className="absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/90 p-1 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
+        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/88 p-1 shadow-sm backdrop-blur-md dark:border-slate-700/70 dark:bg-slate-900/82">
           <button
             type="button"
             onClick={() => viewer.setControlMode("JOINT")}
@@ -121,7 +127,7 @@ export function ViewerCanvas() {
             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
               activeControlMode === "JOINT"
                 ? "bg-sky-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                : "text-slate-600 hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
             }`}
           >
             <Hand className="h-3.5 w-3.5" />
@@ -130,35 +136,37 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => viewer.setControlMode("IK_MOVE")}
-            title="Drag the TCP arrow gizmo in 3D space (IK Move)"
+            title="Drag TCP arrow gizmo in 3D space (IK Move)"
             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
               activeControlMode === "IK_MOVE"
                 ? "bg-sky-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                : "text-slate-600 hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
             }`}
           >
             <Move className="h-3.5 w-3.5" />
-            <span>Drag Move</span>
+            <span className="hidden sm:inline">Move</span>
           </button>
           <button
             type="button"
             onClick={() => viewer.setControlMode("IK_ROTATE")}
-            title="Rotate the TCP orientation gizmo in 3D space (IK Rotate)"
+            title="Rotate TCP orientation gizmo in 3D space (IK Rotate)"
             className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
               activeControlMode === "IK_ROTATE"
                 ? "bg-sky-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                : "text-slate-600 hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
             }`}
           >
             <RotateCw className="h-3.5 w-3.5" />
-            <span>Drag Rotate</span>
+            <span className="hidden sm:inline">Rotate</span>
           </button>
         </div>
 
-        {/* Contextual IK Solver pill — only shown when dragging / IK mode is active */}
+        {/* Contextual IK Solver pill — neatly below mode pill */}
         {viewer.poseMode === "IK" && (
-          <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-2.5 py-1.5 text-xs shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">IK</span>
+          <div className="animate-ui-in inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/88 px-2.5 py-1 text-xs shadow-sm backdrop-blur-md dark:border-slate-700/70 dark:bg-slate-900/82">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              IK
+            </span>
             <select
               aria-label="IK Solver"
               value={viewer.ikSolver}
@@ -170,7 +178,7 @@ export function ViewerCanvas() {
               <option value="DLS">DLS</option>
             </select>
             <span className="h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
-            <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
                 checked={viewer.ikAutoApply}
@@ -188,12 +196,13 @@ export function ViewerCanvas() {
         className="absolute top-3 right-3 z-10 flex items-center gap-1.5"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/90 p-1 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/85">
+        <div className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white/88 p-1 shadow-sm backdrop-blur-md dark:border-slate-700/70 dark:bg-slate-900/82">
           <button
             type="button"
             onClick={() => engineRef.current?.zoomIn()}
             title="Zoom In"
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            aria-label="Zoom In"
+            className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <ZoomIn className="h-4 w-4" />
           </button>
@@ -201,7 +210,8 @@ export function ViewerCanvas() {
             type="button"
             onClick={() => engineRef.current?.zoomOut()}
             title="Zoom Out"
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            aria-label="Zoom Out"
+            className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <ZoomOut className="h-4 w-4" />
           </button>
@@ -209,33 +219,38 @@ export function ViewerCanvas() {
             type="button"
             onClick={() => engineRef.current?.resetCamera()}
             title="Reset Camera View"
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            aria-label="Reset Camera View"
+            className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <RotateCcw className="h-4 w-4" />
           </button>
 
           <div className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
 
-          {/* Lighting Popover Button */}
+          {/* Lighting Popover */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setOpenPopover((p) => (p === "light" ? null : "light"))}
               title="Scene brightness"
+              aria-label="Scene brightness"
+              aria-expanded={openPopover === "light"}
               className={`rounded-lg p-1.5 transition ${
                 openPopover === "light"
                   ? "bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  : "text-slate-600 hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
               }`}
             >
               <Sun className="h-4 w-4" />
             </button>
 
             {openPopover === "light" && (
-              <div className="absolute right-0 mt-2.5 w-56 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+              <div className="animate-ui-in absolute right-0 mt-2.5 w-56 rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
                 <div className="mb-2 flex items-center justify-between font-semibold text-slate-700 dark:text-slate-200">
                   <span>Scene Brightness</span>
-                  <span className="font-mono text-[11px] text-sky-500">{brightnessPct}%</span>
+                  <span className="font-mono text-[11px] tabular-nums text-sky-500">
+                    {brightnessPct}%
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -251,16 +266,17 @@ export function ViewerCanvas() {
             )}
           </div>
 
-          {/* Layers Popover Button */}
+          {/* Layers Popover */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setOpenPopover((p) => (p === "layers" ? null : "layers"))}
-              title="Show or hide 3D layers (Grid, Frames, Workspace, Labels)"
+              title="Show or hide 3D layers"
+              aria-expanded={openPopover === "layers"}
               className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
                 openPopover === "layers"
                   ? "bg-sky-600 text-white"
-                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  : "text-slate-700 hover:bg-slate-100/80 dark:text-slate-200 dark:hover:bg-slate-800/80"
               }`}
             >
               <Layers className="h-3.5 w-3.5" />
@@ -268,114 +284,179 @@ export function ViewerCanvas() {
             </button>
 
             {openPopover === "layers" && (
-              <div className="absolute right-0 mt-2.5 max-h-[75vh] w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                <div className="mb-2 font-semibold text-slate-800 dark:text-slate-100">
-                  3D Display Layers
-                </div>
-                <div className="grid grid-cols-2 gap-y-2 gap-x-2">
-                  {(
-                    [
-                      ["showGrid", "Grid XY"],
-                      ["showZGrid", "Grid Z"],
-                      ["showWorkspace", "Workspace"],
-                      ["showWorkcell", "Workcell"],
-                      ["showTcpFrame", "TCP Frame"],
-                      ["showTcpValue", "3D TCP Tag"],
-                      ["showWorldFrame", "Ground Frame"],
-                      ["showLinkFrames", "Link Frames"],
-                      ["showPath", "Path Line"],
-                      ["showPoints", "Target Dots"],
-                      ["showPointFrames", "Target Frames"],
-                      ["showLabels", "Labels"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <label
-                      key={key}
-                      className="inline-flex cursor-pointer items-center gap-2 text-slate-700 dark:text-slate-300"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(viewer[key])}
-                        onChange={(e) => viewer.setField(key, e.target.checked)}
-                        className="h-3.5 w-3.5 rounded accent-sky-500"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-
-                {viewer.showLinkFrames && (
-                  <div className="mt-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
-                    <div className="mb-1.5 text-[11px] font-semibold text-slate-500">
-                      Visible Link Frames
+              <div className="animate-ui-in absolute right-0 mt-2.5 max-h-[75vh] w-68 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
+                <div className="space-y-3">
+                  {/* Group 1: Environment */}
+                  <div>
+                    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Environment
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {[0, 1, 2, 3, 4, 5].map((i) => (
-                        <label key={i} className="inline-flex cursor-pointer items-center gap-1">
-                          <input
-                            type="checkbox"
-                            checked={viewer.linkFrameVisibility[i]}
-                            onChange={(e) => viewer.setLinkFrameVisible(i, e.target.checked)}
-                            className="h-3.5 w-3.5 rounded accent-sky-500"
+                    <div className="space-y-1.5">
+                      {(
+                        [
+                          ["showWorkcell", "Workcell & Conveyor"],
+                          ["showWorkspace", "Reach Envelope"],
+                          ["showGrid", "Floor Grid (XY)"],
+                          ["showZGrid", "Vertical Grid (Z)"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <span className="text-slate-700 dark:text-slate-300">{label}</span>
+                          <ToggleSwitch
+                            aria-label={label}
+                            checked={Boolean(viewer[key])}
+                            onChange={(checked) => viewer.setField(key, checked)}
                           />
-                          <span className="font-mono text-[11px]">F{i + 1}</span>
-                        </label>
+                        </div>
                       ))}
                     </div>
                   </div>
-                )}
 
-                <div className="mt-3 border-t border-slate-100 pt-2.5 dark:border-slate-800">
-                  <div className="mb-1.5 text-[11px] font-semibold text-slate-500">
-                    Frame Axes & Gizmo Tuning
-                  </div>
-                  <div className="mb-2.5 grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        ["xPos", "X+"],
-                        ["yPos", "Y+"],
-                        ["zPos", "Z+"],
-                        ["xNeg", "X-"],
-                        ["yNeg", "Y-"],
-                        ["zNeg", "Z-"],
-                      ] as Array<[keyof FrameAxesVisibility, string]>
-                    ).map(([axisKey, lbl]) => (
-                      <label key={axisKey} className="inline-flex cursor-pointer items-center gap-1">
-                        <input
-                          type="checkbox"
-                          checked={viewer.frameAxes[axisKey]}
-                          onChange={(e) => viewer.setFrameAxisVisible(axisKey, e.target.checked)}
-                          className="h-3.5 w-3.5 rounded accent-sky-500"
-                        />
-                        <span className="font-mono text-[11px]">{lbl}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-500">Drag Scale</span>
-                      <input
-                        type="range"
-                        min={0.05}
-                        max={1}
-                        step={0.05}
-                        value={viewer.tcpDragScale}
-                        onChange={(e) => viewer.setField("tcpDragScale", Number(e.target.value))}
-                        className="sim-slider w-28"
-                      />
+                  {/* Group 2: Robot & Path */}
+                  <div className="border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Robot & Path
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-500">Frame Len</span>
-                      <input
-                        type="range"
-                        min={0.03}
-                        max={0.16}
-                        step={0.01}
-                        value={viewer.frameLen}
-                        onChange={(e) => viewer.setField("frameLen", Number(e.target.value))}
-                        className="sim-slider w-28"
-                      />
+                    <div className="space-y-1.5">
+                      {(
+                        [
+                          ["showTcpFrame", "TCP Axes"],
+                          ["showTcpValue", "3D TCP Coordinates"],
+                          ["showPath", "Path Trajectory"],
+                          ["showPoints", "Waypoint Markers"],
+                          ["showLabels", "3D Labels"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div key={key} className="flex items-center justify-between gap-2">
+                          <span className="text-slate-700 dark:text-slate-300">{label}</span>
+                          <ToggleSwitch
+                            aria-label={label}
+                            checked={Boolean(viewer[key])}
+                            onChange={(checked) => viewer.setField(key, checked)}
+                          />
+                        </div>
+                      ))}
                     </div>
+                  </div>
+
+                  {/* Collapsible Advanced Frames & Gizmo Tuning */}
+                  <div className="border-t border-slate-100 pt-2 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedLayers((v) => !v)}
+                      className="flex w-full items-center justify-between py-0.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                    >
+                      <span>Frames & Gizmo Tuning</span>
+                      {showAdvancedLayers ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+
+                    {showAdvancedLayers && (
+                      <div className="mt-2.5 space-y-2.5">
+                        <div className="space-y-1.5">
+                          {(
+                            [
+                              ["showWorldFrame", "Ground Frame (F0)"],
+                              ["showLinkFrames", "Link Frames (F1–F6)"],
+                              ["showPointFrames", "Waypoint Frames"],
+                            ] as const
+                          ).map(([key, label]) => (
+                            <div key={key} className="flex items-center justify-between gap-2">
+                              <span className="text-slate-600 dark:text-slate-300">{label}</span>
+                              <ToggleSwitch
+                                aria-label={label}
+                                checked={Boolean(viewer[key])}
+                                onChange={(checked) => viewer.setField(key, checked)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        {viewer.showLinkFrames && (
+                          <div className="flex flex-wrap gap-1.5 rounded-lg bg-slate-50 p-2 dark:bg-slate-950/70">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() =>
+                                  viewer.setLinkFrameVisible(i, !viewer.linkFrameVisibility[i])
+                                }
+                                className={`rounded-md px-2 py-0.5 font-mono text-[10px] font-semibold transition ${
+                                  viewer.linkFrameVisibility[i]
+                                    ? "bg-sky-600 text-white"
+                                    : "bg-slate-200/80 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                                }`}
+                              >
+                                F{i + 1}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="mb-1 text-[10px] text-slate-400">Visible Axes</div>
+                          <div className="grid grid-cols-3 gap-1">
+                            {(
+                              [
+                                ["xPos", "X+"],
+                                ["yPos", "Y+"],
+                                ["zPos", "Z+"],
+                                ["xNeg", "X-"],
+                                ["yNeg", "Y-"],
+                                ["zNeg", "Z-"],
+                              ] as Array<[keyof FrameAxesVisibility, string]>
+                            ).map(([axisKey, lbl]) => (
+                              <button
+                                key={axisKey}
+                                type="button"
+                                onClick={() =>
+                                  viewer.setFrameAxisVisible(axisKey, !viewer.frameAxes[axisKey])
+                                }
+                                className={`rounded-md py-1 font-mono text-[10px] font-semibold transition ${
+                                  viewer.frameAxes[axisKey]
+                                    ? "bg-sky-500/15 text-sky-700 ring-1 ring-sky-500/40 dark:text-sky-300"
+                                    : "bg-slate-100 text-slate-400 dark:bg-slate-800"
+                                }`}
+                              >
+                                {lbl}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 pt-0.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-slate-500">Drag Scale</span>
+                            <input
+                              type="range"
+                              aria-label="Drag scale"
+                              min={0.05}
+                              max={1}
+                              step={0.05}
+                              value={viewer.tcpDragScale}
+                              onChange={(e) => viewer.setField("tcpDragScale", Number(e.target.value))}
+                              className="sim-slider w-28"
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-slate-500">Frame Size</span>
+                            <input
+                              type="range"
+                              aria-label="Frame size"
+                              min={0.03}
+                              max={0.16}
+                              step={0.01}
+                              value={viewer.frameLen}
+                              onChange={(e) => viewer.setField("frameLen", Number(e.target.value))}
+                              className="sim-slider w-28"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -386,15 +467,15 @@ export function ViewerCanvas() {
 
       {/* Bottom-Left: Subtle Live TCP Coordinate + Clickable Gripper HUD */}
       <div
-        className="absolute bottom-3 left-3 z-10 flex flex-col items-start gap-1.5"
+        className="absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-7.5rem)] flex-col items-start gap-1.5"
         onPointerDown={(e) => e.stopPropagation()}
       >
         {workspaceStatus.out && (
-          <div className="rounded-lg border border-rose-500/50 bg-rose-950/85 px-2.5 py-1 text-[11px] font-medium text-rose-200 shadow-md backdrop-blur-sm">
+          <div className="animate-ui-in rounded-lg border border-rose-500/50 bg-rose-950/90 px-2.5 py-1 text-[11px] font-medium text-rose-100 shadow-md backdrop-blur-sm">
             {workspaceStatus.message}
           </div>
         )}
-        <div className="inline-flex items-center gap-2.5 rounded-xl border border-slate-200/70 bg-white/85 px-3 py-1.5 font-mono text-[11px] text-slate-700 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200">
+        <div className="inline-flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-slate-200/80 bg-white/88 px-3 py-1.5 font-mono text-[11px] tabular-nums text-slate-700 shadow-sm backdrop-blur-md dark:border-slate-700/70 dark:bg-slate-900/82 dark:text-slate-200">
           <span className="font-sans text-[10px] font-bold tracking-wider text-sky-600 uppercase dark:text-sky-400">
             TCP
           </span>
@@ -405,30 +486,36 @@ export function ViewerCanvas() {
             <strong className="text-emerald-500">Y</strong> {eePose.y.toFixed(1)}
           </span>
           <span>
-            <strong className="text-sky-500">Z</strong> {eePose.z.toFixed(1)} mm
+            <strong className="text-sky-500">Z</strong> {eePose.z.toFixed(1)}
+            <span className="ml-0.5 hidden text-slate-400 sm:inline">mm</span>
           </span>
-          <span className="hidden text-slate-400 sm:inline">|</span>
-          <button
-            type="button"
-            onClick={() => setGripper(gripperState === "OPEN" ? "CLOSE" : "OPEN")}
-            title={`${toolDef.label}: click to ${gripperState === "OPEN" ? toolDef.grabLabel.toLowerCase() : toolDef.releaseLabel.toLowerCase()} (${toolCodeFor(toolType, gripperState === "OPEN" ? "CLOSE" : "OPEN")})`}
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[10px] font-bold transition ${
-              gripperState === "CLOSE"
-                ? "bg-amber-500/20 text-amber-600 hover:bg-amber-500/30 dark:text-amber-400"
-                : "bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30 dark:text-emerald-400"
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                gripperState === "CLOSE" ? "bg-amber-500" : "bg-emerald-500"
-              }`}
-            />
-            {toolDef.shortLabel}: {gripperState === "CLOSE" ? toolDef.grabLabel : toolDef.releaseLabel}
-          </button>
+          {toolType !== "NONE" && (
+            <>
+              <span className="hidden h-3 w-px bg-slate-300/80 sm:inline-block dark:bg-slate-700" />
+              <button
+                type="button"
+                onClick={() => setGripper(gripperState === "OPEN" ? "CLOSE" : "OPEN")}
+                title={`${toolDef.label}: click to ${gripperState === "OPEN" ? toolDef.grabLabel.toLowerCase() : toolDef.releaseLabel.toLowerCase()} (${toolCodeFor(toolType, gripperState === "OPEN" ? "CLOSE" : "OPEN")})`}
+                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-sans text-[10px] font-bold transition ${
+                  gripperState === "CLOSE"
+                    ? "bg-amber-500/20 text-amber-700 hover:bg-amber-500/30 dark:text-amber-300"
+                    : "bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/30 dark:text-emerald-300"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    gripperState === "CLOSE" ? "bg-amber-500" : "bg-emerald-500"
+                  }`}
+                />
+                {toolDef.shortLabel}:{" "}
+                {gripperState === "CLOSE" ? toolDef.grabLabel : toolDef.releaseLabel}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Bottom-Right: Interactive 3D View Gizmo */}
+      {/* Bottom-Right: Theme-aware Interactive 3D View Gizmo */}
       <div
         aria-label="Camera view gizmo"
         onPointerDown={(e) => {
@@ -447,9 +534,13 @@ export function ViewerCanvas() {
         onPointerUp={() => {
           gizmoDragRef.current.active = false;
         }}
-        className="absolute right-3 bottom-3 z-10 h-22 w-22 cursor-grab rounded-full border border-slate-300/60 bg-slate-900/65 shadow-lg backdrop-blur-sm active:cursor-grabbing dark:border-slate-700/80"
+        onPointerCancel={() => {
+          gizmoDragRef.current.active = false;
+        }}
+        className="absolute right-3 bottom-3 z-10 h-22 w-22 cursor-grab rounded-full border border-slate-300/80 bg-white/80 shadow-md backdrop-blur-md active:cursor-grabbing dark:border-slate-700/80 dark:bg-slate-900/72"
       >
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="-44 -44 88 88">
+          <circle cx={0} cy={0} r={2.5} className="fill-slate-400/60 dark:fill-slate-500/70" />
           {gizmoProj?.axes
             .filter((a) => !a.negative)
             .map((a) => (
