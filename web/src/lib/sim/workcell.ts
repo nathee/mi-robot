@@ -93,6 +93,8 @@ export const DEFAULT_PLATFORMS: Platform[] = [
   { id: "tray", label: "Tray", x: 200, y: 110, sizeX: 130, sizeY: 90, topZ: 20, color: "#64748b" },
 ];
 
+export const PLATFORM_COLORS = ["#64748b", "#78716c", "#0f766e", "#7c3aed"];
+
 export function defaultConveyorRuntime(): ConveyorRuntime {
   return { speedMmS: 0, positionMm: 0, targetMm: null, moveSpeedMmS: 30 };
 }
@@ -384,4 +386,175 @@ export function buildPreset(id: WorkcellPresetId): WorkcellSnapshot {
     );
   }
   return { boxes, platforms, conveyor, conveyorRuntime: defaultConveyorRuntime() };
+}
+
+// ---------------------------------------------------------------------------
+// Layout editing: move / resize the conveyor and trays, carrying resting boxes along.
+// ---------------------------------------------------------------------------
+
+/** Robot reach (mm, horizontal) used to warn when a station is placed out of reach. */
+export const REACH_MIN_MM = 80;
+export const REACH_MAX_MM = 300;
+
+export type ReachStatus = "OK" | "TOO_CLOSE" | "TOO_FAR";
+
+export function reachStatus(x: number, y: number): ReachStatus {
+  const r = Math.hypot(x, y);
+  if (r < REACH_MIN_MM) return "TOO_CLOSE";
+  if (r > REACH_MAX_MM) return "TOO_FAR";
+  return "OK";
+}
+
+/** Where boxes stop on the belt (downstream end stop, centre of a default box). */
+export function conveyorPickPoint(c: ConveyorConfig, size = DEFAULT_BOX_SIZE): { x: number; y: number; z: number } {
+  const { min, cross } = conveyorExtent(c);
+  const a = min + size / 2;
+  return c.axis === "x"
+    ? { x: a, y: cross, z: c.topZ + size / 2 }
+    : { x: cross, y: a, z: c.topZ + size / 2 };
+}
+
+function clampNum(v: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+export function normalizeConveyor(c: ConveyorConfig): ConveyorConfig {
+  return {
+    x: clampNum(c.x, -400, 400, DEFAULT_CONVEYOR.x),
+    y: clampNum(c.y, -400, 400, DEFAULT_CONVEYOR.y),
+    lengthMm: clampNum(c.lengthMm, 100, 600, DEFAULT_CONVEYOR.lengthMm),
+    widthMm: clampNum(c.widthMm, 30, 120, DEFAULT_CONVEYOR.widthMm),
+    topZ: clampNum(c.topZ, 20, 200, DEFAULT_CONVEYOR.topZ),
+    axis: c.axis === "y" ? "y" : "x",
+  };
+}
+
+export function normalizePlatform(p: Platform): Platform {
+  return {
+    ...p,
+    x: clampNum(p.x, -400, 400, 200),
+    y: clampNum(p.y, -400, 400, 110),
+    sizeX: clampNum(p.sizeX, 30, 300, 130),
+    sizeY: clampNum(p.sizeY, 30, 300, 90),
+    topZ: clampNum(p.topZ, 5, 200, 20),
+  };
+}
+
+/** Boxes resting on a footprint at topZ, including boxes stacked on top of them. */
+function boxesCarriedBy(
+  boxes: readonly WorkBox[],
+  inFootprint: (b: WorkBox) => boolean,
+  topZ: number
+): Set<string> {
+  const carried = new Set<string>();
+  const sorted = boxes.filter((b) => !b.held).sort((a, b) => a.z - b.z);
+  for (const b of sorted) {
+    const bottom = b.z - b.size / 2;
+    if (inFootprint(b) && Math.abs(bottom - topZ) < 1) {
+      carried.add(b.id);
+      continue;
+    }
+    // Stacked on an already-carried box
+    const base = sorted.find(
+      (o) =>
+        carried.has(o.id) &&
+        Math.abs(o.z + o.size / 2 - bottom) < 1 &&
+        Math.abs(o.x - b.x) <= o.size / 2 &&
+        Math.abs(o.y - b.y) <= o.size / 2
+    );
+    if (base) carried.add(b.id);
+  }
+  return carried;
+}
+
+/**
+ * Applies a conveyor layout change. Boxes riding on the belt keep their place on it:
+ * same distance from the end stop and the same offset across the belt.
+ */
+export function applyConveyorLayout(
+  conveyor: ConveyorConfig,
+  boxes: readonly WorkBox[],
+  partial: Partial<ConveyorConfig>
+): { conveyor: ConveyorConfig; boxes: WorkBox[] } {
+  const next = normalizeConveyor({ ...conveyor, ...partial });
+  const prevExt = conveyorExtent(conveyor);
+  const nextExt = conveyorExtent(next);
+  const carried = boxesCarriedBy(
+    boxes,
+    (b) =>
+      along(conveyor, b) >= prevExt.min - 1e-6 &&
+      along(conveyor, b) <= prevExt.max + 1e-6 &&
+      Math.abs(acrossOffset(conveyor, b)) <= conveyor.widthMm / 2,
+    conveyor.topZ
+  );
+  const dz = next.topZ - conveyor.topZ;
+  const out = boxes.map((b) => {
+    if (!carried.has(b.id)) return b;
+    const fromEnd = along(conveyor, b) - prevExt.min;
+    const off = acrossOffset(conveyor, b);
+    const a = Math.min(nextExt.max - b.size / 2, nextExt.min + fromEnd);
+    const o = Math.max(-next.widthMm / 2 + b.size / 2, Math.min(next.widthMm / 2 - b.size / 2, off));
+    const x = next.axis === "x" ? a : next.x + o;
+    const y = next.axis === "x" ? next.y + o : a;
+    let q = b.q;
+    if (next.axis !== conveyor.axis) {
+      const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), next.axis === "y" ? Math.PI / 2 : -Math.PI / 2);
+      const nq = turn.multiply(new Quaternion(...b.q));
+      q = [nq.x, nq.y, nq.z, nq.w];
+    }
+    return { ...b, x, y, z: b.z + dz, q };
+  });
+  return { conveyor: next, boxes: out };
+}
+
+/** Applies a tray layout change; boxes on the tray (and stacks on them) move with it. */
+export function applyPlatformLayout(
+  platform: Platform,
+  boxes: readonly WorkBox[],
+  partial: Partial<Platform>
+): { platform: Platform; boxes: WorkBox[] } {
+  const next = normalizePlatform({ ...platform, ...partial, id: platform.id });
+  const carried = boxesCarriedBy(
+    boxes,
+    (b) => Math.abs(b.x - platform.x) <= platform.sizeX / 2 && Math.abs(b.y - platform.y) <= platform.sizeY / 2,
+    platform.topZ
+  );
+  const dx = next.x - platform.x;
+  const dy = next.y - platform.y;
+  const dz = next.topZ - platform.topZ;
+  const out = boxes.map((b) => {
+    if (!carried.has(b.id)) return b;
+    // Keep boxes inside a shrunken tray
+    const x = Math.max(next.x - next.sizeX / 2, Math.min(next.x + next.sizeX / 2, b.x + dx));
+    const y = Math.max(next.y - next.sizeY / 2, Math.min(next.y + next.sizeY / 2, b.y + dy));
+    return { ...b, x, y, z: b.z + dz };
+  });
+  return { platform: next, boxes: out };
+}
+
+/** Drops every resting box straight down onto whatever is underneath it now (bottom-up). */
+export function settleBoxes(
+  boxes: readonly WorkBox[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig
+): WorkBox[] {
+  const order = boxes
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => !b.held)
+    .sort((a, b) => a.b.z - b.b.z);
+  const out = boxes.slice();
+  const settled: WorkBox[] = [];
+  for (const { b, i } of order) {
+    const support = supportHeightAt(b.x, b.y, b.z - b.size / 2 + 2, {
+      boxes: settled,
+      platforms,
+      conveyor,
+    });
+    const nb = { ...b, z: support + b.size / 2 };
+    out[i] = nb;
+    settled.push(nb);
+  }
+  return out;
 }

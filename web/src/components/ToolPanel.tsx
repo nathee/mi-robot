@@ -1,8 +1,27 @@
 "use client";
 
-import { Box, Hand, Pause, Play, Plus, RotateCcw, SkipBack, SkipForward, Trash2, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  Box,
+  Hand,
+  LayoutGrid,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Trash2,
+  Wrench,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { WORKCELL_PRESETS, type WorkcellPresetId } from "@/lib/sim/workcell";
+import {
+  conveyorPickPoint,
+  reachStatus,
+  WORKCELL_PRESETS,
+  type ReachStatus,
+  type WorkcellPresetId,
+} from "@/lib/sim/workcell";
 import { TOOL_DEFS, TOOL_TYPES, toolCodeFor, type ToolType } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
@@ -30,6 +49,54 @@ function Section({ icon, title, children }: { icon: ReactNode; title: string; ch
   );
 }
 
+function NumField({
+  label,
+  value,
+  onChange,
+  step = 10,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <label className="flex min-w-0 flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+      <span>{label}</span>
+      <input
+        type="number"
+        step={step}
+        min={min}
+        max={max}
+        value={Math.round(value * 10) / 10}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (e.target.value !== "" && Number.isFinite(v)) onChange(v);
+        }}
+        className="w-full rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+      />
+    </label>
+  );
+}
+
+function ReachBadge({ status }: { status: ReachStatus }) {
+  if (status === "OK") {
+    return <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">within reach</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-rose-600 dark:text-rose-400">
+      <AlertTriangle className="h-3 w-3" />
+      {status === "TOO_FAR" ? "too far for the arm" : "too close to the base"}
+    </span>
+  );
+}
+
+const CARD = "rounded-xl border border-slate-200/80 bg-white p-2 dark:border-slate-800 dark:bg-slate-900/70";
+
 export function ToolPanel() {
   const toolType = useRobotStore((s) => s.toolType);
   const gripperState = useRobotStore((s) => s.gripperState);
@@ -40,12 +107,15 @@ export function ToolPanel() {
   const preset = useWorkcellStore((s) => s.preset);
   const runtime = useWorkcellStore((s) => s.conveyorRuntime);
   const lastGraspMessage = useWorkcellStore((s) => s.lastGraspMessage);
+  const conveyor = useWorkcellStore((s) => s.conveyor);
+  const platforms = useWorkcellStore((s) => s.platforms);
   const wc = useWorkcellStore.getState;
 
   const def = TOOL_DEFS[toolType];
   const held = boxes.find((b) => b.held);
   const speedPercent = Math.round((runtime.speedMmS / 50) * 100);
   const moving = runtime.speedMmS !== 0 || runtime.targetMm !== null;
+  const pick = conveyorPickPoint(conveyor);
 
   return (
     <div className="space-y-4">
@@ -201,6 +271,85 @@ export function ToolPanel() {
         <p className="mt-1 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
           Negative = belt moves toward the robot (end stop). Commands: G6 F-100..100 (MS4220) or G91 G01 D±mm (7th axis).
         </p>
+      </Section>
+
+      <Section icon={<LayoutGrid className="h-3 w-3 text-sky-500" />} title="Layout (mm, robot base frame)">
+        <div className="space-y-2">
+          <div className={CARD}>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">Conveyor</span>
+              <div className="inline-flex rounded-md border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-950">
+                {(["x", "y"] as const).map((ax) => (
+                  <button
+                    key={ax}
+                    type="button"
+                    onClick={() => wc().updateConveyorLayout({ axis: ax })}
+                    className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                      conveyor.axis === ax ? "bg-sky-600 text-white" : "text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    along {ax.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <NumField label="Center X" value={conveyor.x} onChange={(v) => wc().updateConveyorLayout({ x: v })} />
+              <NumField label="Center Y" value={conveyor.y} onChange={(v) => wc().updateConveyorLayout({ y: v })} />
+              <NumField label="Height" value={conveyor.topZ} step={5} onChange={(v) => wc().updateConveyorLayout({ topZ: v })} />
+              <NumField label="Length" value={conveyor.lengthMm} onChange={(v) => wc().updateConveyorLayout({ lengthMm: v })} />
+              <NumField label="Width" value={conveyor.widthMm} step={5} onChange={(v) => wc().updateConveyorLayout({ widthMm: v })} />
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 font-mono text-[10px] text-slate-500 dark:text-slate-400">
+              <span>
+                Pick at end stop: ({pick.x.toFixed(1)}, {pick.y.toFixed(1)}, {(pick.z + 12.5).toFixed(1)})
+              </span>
+              <ReachBadge status={reachStatus(pick.x, pick.y)} />
+            </div>
+          </div>
+
+          {platforms.map((p) => (
+            <div key={p.id} className={CARD}>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  <span className="h-3 w-3 rounded-sm" style={{ background: p.color }} />
+                  {p.label}
+                </span>
+                <div className="flex items-center gap-2">
+                  <ReachBadge status={reachStatus(p.x, p.y)} />
+                  <button
+                    type="button"
+                    onClick={() => wc().removePlatform(p.id)}
+                    className="text-slate-400 transition hover:text-rose-500"
+                    aria-label={`Remove ${p.label}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <NumField label="Center X" value={p.x} onChange={(v) => wc().updatePlatform(p.id, { x: v })} />
+                <NumField label="Center Y" value={p.y} onChange={(v) => wc().updatePlatform(p.id, { y: v })} />
+                <NumField label="Height" value={p.topZ} step={5} onChange={(v) => wc().updatePlatform(p.id, { topZ: v })} />
+                <NumField label="Size X" value={p.sizeX} onChange={(v) => wc().updatePlatform(p.id, { sizeX: v })} />
+                <NumField label="Size Y" value={p.sizeY} onChange={(v) => wc().updatePlatform(p.id, { sizeY: v })} />
+              </div>
+            </div>
+          ))}
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <button type="button" className={BTN} onClick={() => wc().addPlatform()}>
+              <Plus className="h-3 w-3" /> Add tray
+            </button>
+            <button type="button" className={BTN} onClick={() => wc().resetLayout()}>
+              <RotateCcw className="h-3 w-3" /> Reset layout
+            </button>
+          </div>
+          <p className="text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+            Boxes on the conveyor or a tray move with it. The sample programs use the default layout,
+            so update their coordinates after you move a station.
+          </p>
+        </div>
       </Section>
     </div>
   );

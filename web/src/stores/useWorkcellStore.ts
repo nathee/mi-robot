@@ -2,7 +2,14 @@ import { create } from "zustand";
 import { Quaternion, Vector3 } from "three";
 import { tcpMatrixFromJointsDeg } from "@/lib/kinematics/fk";
 import {
+  applyConveyorLayout,
+  applyPlatformLayout,
   BOX_COLORS,
+  DEFAULT_CONVEYOR,
+  DEFAULT_PLATFORMS,
+  PLATFORM_COLORS,
+  type ConveyorConfig,
+  type Platform,
   buildPreset,
   CONVEYOR_MAX_SPEED_MM_S,
   conveyorFeedPoint,
@@ -12,6 +19,7 @@ import {
   graspBox,
   makeBox,
   releaseBoxes,
+  settleBoxes,
   stepConveyor,
   supportHeightAt,
   updateHeldBoxes,
@@ -32,6 +40,11 @@ interface WorkcellState extends WorkcellSnapshot {
   addBox: (where: "CONVEYOR" | "TRAY", size?: number) => void;
   removeBox: (id: string) => void;
   clearBoxes: () => void;
+  updateConveyorLayout: (partial: Partial<ConveyorConfig>) => void;
+  updatePlatform: (id: string, partial: Partial<Platform>) => void;
+  addPlatform: () => void;
+  removePlatform: (id: string) => void;
+  resetLayout: () => void;
   setConveyorSpeedPercent: (percent: number) => void;
   moveConveyor: (distanceMm: number, absolute: boolean, feed?: number) => void;
   stopConveyor: () => void;
@@ -81,6 +94,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       y = p.y;
     } else {
       const tray = s.platforms[0];
+      if (!tray) return;
       x = tray.x + ((num % 3) - 1) * 40;
       y = tray.y + ((Math.floor(num / 3) % 2) - 0.5) * 40;
     }
@@ -94,6 +108,63 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       color: BOX_COLORS[(num - 1) % BOX_COLORS.length],
     });
     set({ boxes: [...s.boxes, box], nextBoxNum: num + 1 });
+  },
+
+  updateConveyorLayout(partial) {
+    const s = get();
+    const res = applyConveyorLayout(s.conveyor, s.boxes, partial);
+    set({ conveyor: res.conveyor, boxes: res.boxes });
+  },
+
+  updatePlatform(id, partial) {
+    const s = get();
+    const p = s.platforms.find((pl) => pl.id === id);
+    if (!p) return;
+    const res = applyPlatformLayout(p, s.boxes, partial);
+    set({ platforms: s.platforms.map((pl) => (pl.id === id ? res.platform : pl)), boxes: res.boxes });
+  },
+
+  addPlatform() {
+    const s = get();
+    let n = s.platforms.length + 1;
+    while (s.platforms.some((p) => p.id === `tray-${n}`)) n++;
+    const platform: Platform = {
+      id: `tray-${n}`,
+      label: `Tray ${n}`,
+      x: 140,
+      y: 170,
+      sizeX: 80,
+      sizeY: 80,
+      topZ: 20,
+      color: PLATFORM_COLORS[(n - 1) % PLATFORM_COLORS.length],
+    };
+    set({ platforms: [...s.platforms, platform] });
+  },
+
+  removePlatform(id) {
+    const s = get();
+    const p = s.platforms.find((pl) => pl.id === id);
+    if (!p) return;
+    const platforms = s.platforms.filter((pl) => pl.id !== id);
+    // Boxes that were on it drop to whatever is underneath now
+    set({ platforms, boxes: settleBoxes(s.boxes, platforms, s.conveyor) });
+  },
+
+  resetLayout() {
+    const s = get();
+    let boxes = applyConveyorLayout(s.conveyor, s.boxes, DEFAULT_CONVEYOR).boxes;
+    let platforms = s.platforms;
+    const def = DEFAULT_PLATFORMS[0];
+    const first = platforms[0];
+    if (first) {
+      const res = applyPlatformLayout(first, boxes, { ...def, id: first.id });
+      boxes = res.boxes;
+      platforms = [res.platform];
+    } else {
+      platforms = DEFAULT_PLATFORMS.map((p) => ({ ...p }));
+    }
+    const conveyor = { ...DEFAULT_CONVEYOR };
+    set({ conveyor, platforms, boxes: settleBoxes(boxes, platforms, conveyor) });
   },
 
   removeBox(id) {
