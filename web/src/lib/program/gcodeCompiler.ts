@@ -293,8 +293,9 @@ export function stepsToGcode(
         }
         break;
       case "TOOL":
+        // Skip when the header already announced this tool (avoids a duplicate "; TOOL:" line)
+        if (step.tool !== tool) lines.push(`; TOOL: ${TOOL_DEFS[step.tool].label}`);
         tool = step.tool;
-        lines.push(`; TOOL: ${TOOL_DEFS[step.tool].label}`);
         break;
       case "LOG":
         lines.push(`; ${step.message}`);

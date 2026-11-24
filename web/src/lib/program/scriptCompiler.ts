@@ -398,6 +398,62 @@ home()
 log("All boxes on the tray!")
 `,
   },
+  twoFingerConveyor: {
+    name: "Conveyor → Tray (Two-Finger, Sensor)",
+    code: `# Workcell preset "Conveyor Feed" (Tools tab -> Workcell)
+# Auto-feed brings each box to the light sensor, the two-finger gripper
+# picks it from the belt and places it on the tray. The next box waits
+# until the gripped box has been lifted clear of the beam.
+# Fingers must surround the box: TCP between box centre (z=72.5) and top (z=85).
+tool("TWO_FINGER")
+home()
+gripper("open")
+conveyorAuto("on", speed=60)
+
+log("Box 1")
+waitSensor(timeout=30)
+moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+moveL(132.5, -150, 78, 0, 0, 0, speed=40)
+gripper("close")
+wait(1.5)
+moveL(132.5, -150, 130, 0, 0, 0, speed=60)
+moveL(200, 80, 110, 0, 0, 0, speed=100)
+moveL(200, 80, 38, 0, 0, 0, speed=40)
+gripper("open")
+wait(0.3)
+moveL(200, 80, 110, 0, 0, 0, speed=90)
+
+log("Box 2")
+waitSensor(timeout=30)
+moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+moveL(132.5, -150, 78, 0, 0, 0, speed=40)
+gripper("close")
+wait(1.5)
+moveL(132.5, -150, 130, 0, 0, 0, speed=60)
+moveL(200, 110, 110, 0, 0, 0, speed=100)
+moveL(200, 110, 38, 0, 0, 0, speed=40)
+gripper("open")
+wait(0.3)
+moveL(200, 110, 110, 0, 0, 0, speed=90)
+
+log("Box 3")
+waitSensor(timeout=30)
+moveL(132.5, -150, 130, 0, 0, 0, speed=90)
+moveL(132.5, -150, 78, 0, 0, 0, speed=40)
+gripper("close")
+wait(1.5)
+moveL(132.5, -150, 130, 0, 0, 0, speed=60)
+moveL(200, 140, 110, 0, 0, 0, speed=100)
+moveL(200, 140, 38, 0, 0, 0, speed=40)
+gripper("open")
+wait(0.3)
+moveL(200, 140, 110, 0, 0, 0, speed=90)
+
+conveyorAuto("off")
+home()
+log("Done: 3 boxes moved to the tray")
+`,
+  },
   softGripper: {
     name: "Tray → Conveyor (Soft Gripper)",
     code: `# Workcell preset "Pick & Place" (Tools tab → Workcell)

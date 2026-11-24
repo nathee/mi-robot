@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { pose6DToTargetMatrix } from "@/lib/kinematics/fk";
 import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
 import { compileGcodeProgram, SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
-import { compileScriptProgram, SAMPLE_SCRIPTS } from "@/lib/program/scriptCompiler";
+import { compileScriptProgram, SAMPLE_SCRIPTS, scriptToGcode } from "@/lib/program/scriptCompiler";
 import type { ProgramStep } from "@/lib/program/types";
 import { DEFAULT_PLATFORMS, isOnConveyor } from "@/lib/sim/workcell";
 import { useRobotStore } from "@/stores/useRobotStore";
@@ -91,6 +91,28 @@ describe("workcell end-to-end", () => {
     expect(s.boxes.every(onTray)).toBe(true);
     expect(s.sensorCount - before).toBe(3);
     expect(s.autoFeed.enabled).toBe(false);
+  });
+
+  it("two-finger sample picks all 3 boxes from the belt onto the tray", () => {
+    useWorkcellStore.getState().loadPreset("CONVEYOR");
+    const before = useWorkcellStore.getState().sensorCount;
+    const res = compileScriptProgram(SAMPLE_SCRIPTS.twoFingerConveyor.code);
+    expect(res.errors).toEqual([]);
+    run(res.steps);
+    const s = useWorkcellStore.getState();
+    expect(s.boxes).toHaveLength(3);
+    expect(s.boxes.every(onTray)).toBe(true);
+    expect(s.sensorCount - before).toBe(3);
+    expect(s.autoFeed.enabled).toBe(false);
+  });
+
+  it("G-code header announces the tool once", () => {
+    const { gcode, errors } = scriptToGcode(SAMPLE_SCRIPTS.twoFingerConveyor.code, "T", "TWO_FINGER");
+    expect(errors).toEqual([]);
+    expect(gcode.match(/; TOOL:/g)).toHaveLength(1);
+    // A real tool change still gets announced
+    const changed = scriptToGcode(`tool("SUCTION")\nhome()`, "T", "TWO_FINGER").gcode;
+    expect(changed.match(/; TOOL:/g)).toHaveLength(2);
   });
 
   it("soft gripper sample moves a tray box onto the conveyor", () => {
