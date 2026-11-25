@@ -12,8 +12,8 @@ import {
   applyConveyorLayout,
   applyPlatformLayout,
   BOX_COLORS,
-  DEFAULT_CONVEYOR,
-  DEFAULT_PLATFORMS,
+  defaultConveyor,
+  defaultPlatforms,
   PLATFORM_COLORS,
   type ConveyorConfig,
   type Platform,
@@ -194,18 +194,20 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
 
   resetLayout() {
     const s = get();
-    let boxes = applyConveyorLayout(s.conveyor, s.boxes, DEFAULT_CONVEYOR).boxes;
+    const defConveyor = defaultConveyor();
+    const defPlatforms = defaultPlatforms();
+    let boxes = applyConveyorLayout(s.conveyor, s.boxes, defConveyor).boxes;
     let platforms = s.platforms;
-    const def = DEFAULT_PLATFORMS[0];
+    const def = defPlatforms[0];
     const first = platforms[0];
     if (first) {
       const res = applyPlatformLayout(first, boxes, { ...def, id: first.id });
       boxes = res.boxes;
       platforms = [res.platform];
     } else {
-      platforms = DEFAULT_PLATFORMS.map((p) => ({ ...p }));
+      platforms = defPlatforms;
     }
-    const conveyor = { ...DEFAULT_CONVEYOR };
+    const conveyor = defConveyor;
     set({ conveyor, platforms, boxes: settleBoxes(boxes, platforms, conveyor) });
   },
 

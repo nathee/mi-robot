@@ -114,4 +114,14 @@ export const XARM2_PROFILE: RobotProfile = {
     ],
     gripper: { servoId: 1, openPos: 300, closePos: 700 },
   },
+  // The arm is short (L2 + L3 = 196 mm) and the gripper-down wrist sits 150 mm above the TCP, so
+  // a top-down grasp only reaches ~155 mm out at tray height. The Mirobot layout (tray at
+  // r ≈ 228 mm, belt end at r ≈ 200 mm) is out of reach; keep both stations close and low,
+  // clear of the base plate (front edge at x = 77.5 mm, |y| < 77.5 mm).
+  workcell: {
+    conveyor: { x: 147.5, y: -115, lengthMm: 200, widthMm: 60, topZ: 20, axis: "x" },
+    platforms: [{ id: "tray", label: "Tray", x: 112, y: 0, sizeX: 60, sizeY: 120, topZ: 20, color: "#64748b" }],
+    reachMinMm: 80,
+    reachMaxMm: 150,
+  },
 };
