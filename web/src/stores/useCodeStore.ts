@@ -40,6 +40,7 @@ import { useProjectStore } from "./useProjectStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { t } from "@/lib/i18n";
 
 export type CodeRunStatus = "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "ERROR";
 
@@ -226,7 +227,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
   const canEditHistory = () => {
     const status = get().status;
     if (status === "RUNNING" || status === "PAUSED") {
-      logCode("Stop the program before undoing block edits", "error");
+      logCode(t("log.code.stopBeforeUndo"), "error");
       return false;
     }
     return true;
@@ -270,7 +271,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
       activeBlockId: null,
     }));
     useProjectStore.getState().setDirty(true);
-    logCode("Undo block edit");
+    logCode(t("code.undoBlock"));
     return true;
   },
 
@@ -286,7 +287,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
       activeBlockId: null,
     }));
     useProjectStore.getState().setDirty(true);
-    logCode("Redo block edit");
+    logCode(t("code.redoBlock"));
     return true;
   },
 
@@ -353,7 +354,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
   loadSampleBlocks() {
     get().stop();
     commitBlocks(createDemoBlocks());
-    logCode("Loaded Demo Pick & Place visual blocks");
+    logCode(t("log.code.demoLoaded"));
   },
 
   insertCurrentPose(space) {
@@ -427,7 +428,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
     }
     const gcode = blocksToGcode(get().blocks, useProjectStore.getState().name, useRobotStore.getState().toolType);
     set({ gcodeText: gcode, mode: "GCODE", errors: [] });
-    logCode("Converted Visual Blocks → WLKATA G-code", "ok");
+    logCode(t("log.code.blocksToGcode"), "ok");
     return true;
   },
 
@@ -439,7 +440,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
     }
     const script = `# Converted from Visual Blocks\n${blocksToScript(get().blocks)}\n`;
     set({ scriptText: script, mode: "SCRIPT", errors: [] });
-    logCode("Converted Visual Blocks → Easy Script", "ok");
+    logCode(t("log.code.blocksToScript"), "ok");
     return true;
   },
 
@@ -454,7 +455,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
       return false;
     }
     set({ gcodeText: gcode, mode: "GCODE", errors: [] });
-    logCode("Converted Easy Script → WLKATA G-code", "ok");
+    logCode(t("log.code.scriptToGcode"), "ok");
     return true;
   },
 
@@ -471,7 +472,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
   generateFromPath() {
     const path = usePathStore.getState();
     if (path.targets.length === 0) {
-      logCode("Generate from Path: no waypoints to convert", "error");
+      logCode(t("log.code.noWaypoints"), "error");
       return false;
     }
     if (get().status === "RUNNING" || get().status === "PAUSED") get().stop("Program replaced from Path");
@@ -499,10 +500,10 @@ export const useCodeStore = create<CodeState>((set, get) => {
     });
     warnings.forEach((w) => logCode(w));
     if (res.errors.length) {
-      logCode(`Generated Blocks from Path with ${res.errors.length} error(s); G-code not generated`, "error");
+      logCode(t("log.code.generatedWithErrors", { n: res.errors.length }), "error");
       return false;
     }
-    logCode(`Generated Blocks, Script and G-code from ${path.targets.length} Path waypoints`, "ok");
+    logCode(t("log.code.generated", { n: path.targets.length }), "ok");
     return true;
   },
 
@@ -519,11 +520,11 @@ export const useCodeStore = create<CodeState>((set, get) => {
 
     set({ compiledSteps: res.steps, errors: res.errors });
     if (res.errors.length) {
-      logCode(`Compile failed: Line ${res.errors[0].line} — ${res.errors[0].message}`, "error");
+      logCode(t("log.code.compileFailed", { line: res.errors[0].line, message: res.errors[0].message }), "error");
       return false;
     }
     if (!res.steps.length) {
-      logCode("Nothing to run: program has 0 steps", "error");
+      logCode(t("log.code.nothingToRun"), "error");
       return false;
     }
     return true;
@@ -533,7 +534,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
     const state = get();
     if (state.status === "RUNNING") {
       set({ status: "PAUSED" });
-      logCode("Paused program execution");
+      logCode(t("log.code.paused"));
       return;
     }
 
@@ -541,7 +542,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
 
     if (state.status === "PAUSED" && state.runtime) {
       set({ status: "RUNNING" });
-      logCode("Resumed program execution");
+      logCode(t("log.code.resumed"));
       return;
     }
 
@@ -569,7 +570,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
         startPose: { ...robot.eePose },
       },
     });
-    logCode(`Started ${state.mode} program (${steps.length} steps)`);
+    logCode(t("log.code.started", { mode: state.mode, n: steps.length }));
   },
 
   stepOnce() {
@@ -604,7 +605,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
       if (solved && solved.err.posMm <= 5) {
         robot.setJoints(solved.q, { syncIk: true });
       } else {
-        logCode(`Step ${nextIdx + 1} IK failed for ${step.label}`, "error");
+        logCode(t("log.code.ikFailed", { i: nextIdx + 1, label: step.label }), "error");
         set({ status: "ERROR" });
         return;
       }
@@ -625,7 +626,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
       stepProgress: 1,
       runtime: null,
     });
-    logCode(`Step ${nextIdx + 1}/${steps.length}: ${step.label}`);
+    logCode(`${t("code.stepOf", { i: nextIdx + 1, n: steps.length })}: ${step.label}`);
   },
 
   stop(reason) {
@@ -645,7 +646,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
     const st = get().status;
     if (st !== "RUNNING" && st !== "PAUSED") return;
     set({ status: "ERROR", runtime: null });
-    logCode(`Stopped: collision (${message})`, "error");
+    logCode(t("log.path.collision", { what: message }), "error");
   },
 
   advanceCodeFrame(dtMs) {
@@ -671,7 +672,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
         nextElapsed = state.runtime.durationMs;
       } else if (nextElapsed >= state.runtime.durationMs) {
         set({ status: "ERROR", runtime: null });
-        logCode(`Timeout: ${step.label} (${(step.timeoutMs / 1000).toFixed(0)} s)`, "error");
+        logCode(t("log.code.timeout", { label: step.label, s: (step.timeoutMs / 1000).toFixed(0) }), "error");
         return;
       }
     }
@@ -729,7 +730,7 @@ export const useCodeStore = create<CodeState>((set, get) => {
         stepProgress: 1,
         runtime: null,
       });
-      logCode("Program execution finished!", "ok");
+      logCode(t("log.code.finished"), "ok");
       return;
     }
 

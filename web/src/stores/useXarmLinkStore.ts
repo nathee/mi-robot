@@ -19,6 +19,7 @@ import { useCodeStore } from "./useCodeStore";
 import { usePathStore } from "./usePathStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
+import { t } from "@/lib/i18n";
 
 /** Minimal WebHID surface (the DOM lib in this TS setup has no WebHID types). */
 interface HidInputReportEventLike extends Event {
@@ -96,7 +97,7 @@ let applyNextPositions = false;
 
 function busServos() {
   const map = getActiveRobotProfile().busServos;
-  if (!map) throw new Error("The active robot has no bus-servo map");
+  if (!map) throw new Error(t("log.xarm.noMap"));
   return map;
 }
 
@@ -121,7 +122,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       set((s) => ({ txCount: s.txCount + 1 }));
       if (!opts.quiet) log("out", formatFrameHex(frame));
     } catch (err) {
-      const msg = errorMessage(err, "Send failed");
+      const msg = errorMessage(err, t("log.xarm.sendFailed"));
       set({ lastError: msg });
       log("error", msg);
     }
@@ -220,7 +221,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
           },
         });
       } catch (err) {
-        const msg = errorMessage(err, "Could not open the xArm USB device");
+        const msg = errorMessage(err, t("log.xarm.hidFailed"));
         set({ lastError: msg });
         log("error", msg);
       }
@@ -240,7 +241,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         }
       ).serial;
       if (!serial) {
-        const msg = "Web Serial needs Chrome, Edge or Opera on desktop.";
+        const msg = t("log.hw.needChromium");
         set({ lastError: msg });
         log("error", msg);
         return;
@@ -255,7 +256,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
           kind: "SERIAL",
           label: `USB serial @ ${XARM_UART_BAUD}`,
           send: async (frame) => {
-            if (!writer) throw new Error("Serial port is not writable");
+            if (!writer) throw new Error(t("log.serialNotWritable"));
             await writer.write(frame);
           },
           close: async () => {
@@ -274,7 +275,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
           }
         })();
       } catch (err) {
-        const msg = errorMessage(err, "Could not open the serial port");
+        const msg = errorMessage(err, t("log.hw.openFailed"));
         set({ lastError: msg });
         log("error", msg);
       }
@@ -296,17 +297,17 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       unsubscribeRobot = useRobotStore.subscribe((s, prev) => {
         if (s.joints !== prev.joints || s.gripperState !== prev.gripperState) scheduleMirror();
       });
-      log("ok", `Connected: ${next.label}. Press "Read positions" to check the link, then enable Follow simulator.`);
+      log("ok", t("log.xarm.connected", { device: next.label }));
       void get().readBattery();
     },
 
     async disconnect() {
-      const t = transport;
+      const active = transport;
       resetLinkState();
       set({ connected: false, transport: "NONE", deviceLabel: "", mirror: false, teach: false });
-      if (t) {
-        await t.close().catch(() => undefined);
-        log("sys", "Disconnected");
+      if (active) {
+        await active.close().catch(() => undefined);
+        log("sys", t("hw.disconnected"));
       }
     },
 
@@ -329,7 +330,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         set((s) => ({ rxCount: s.rxCount + 1 }));
         if (reply.kind === "BATTERY") {
           set({ batteryVolts: reply.volts });
-          if (!get().teach) log("in", `Battery ${reply.volts.toFixed(2)} V`);
+          if (!get().teach) log("in", t("log.xarm.battery", { v: reply.volts.toFixed(2) }));
         } else if (reply.kind === "POSITIONS") {
           if (!applyNextPositions && !get().teach) continue;
           applyNextPositions = false;
@@ -342,7 +343,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
           lastSentJoints = q.slice();
           robot.setJoints(q, { syncIk: true });
           if (!get().teach) {
-            log("in", `Positions: ${[...reply.positions].map(([id, p]) => `#${id}=${p}`).join(" ")}`);
+            log("in", t("log.xarm.positions", { list: [...reply.positions].map(([id, p]) => `#${id}=${p}`).join(" ") }));
           }
         }
       }
@@ -355,7 +356,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       if (get().teach) get().setTeach(false);
       // First move syncs the real arm slowly to wherever the simulator is.
       const robot = useRobotStore.getState();
-      log("sys", `Follow simulator ON: moving the arm to the simulator pose over ${SYNC_MOVE_MS / 1000}s`);
+      log("sys", t("log.xarm.followOn", { s: SYNC_MOVE_MS / 1000 }));
       void movePose(robot.joints, robot.gripperState === "CLOSE", SYNC_MOVE_MS, false);
     },
 
@@ -365,14 +366,14 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         if (!get().connected) return;
         set({ teach: true, mirror: false });
         void send(buildServoOffPacket(busServos().joints.map((j) => j.servoId)));
-        log("sys", "Teach mode: servos are limp, move the arm by hand. The simulator follows.");
+        log("sys", t("log.xarm.teachOn"));
         teachTimer = setInterval(() => {
           void send(buildReadPositionsPacket(busServos().joints.map((j) => j.servoId)), { quiet: true });
         }, TEACH_POLL_MS);
       } else {
         stopTeachPolling();
         set({ teach: false });
-        log("sys", "Teach mode off: servos stay limp until the next move is sent.");
+        log("sys", t("log.xarm.teachOff"));
       }
     },
 
@@ -401,7 +402,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       if (!get().connected) return;
       set({ mirror: false });
       await send(buildServoOffPacket(allServoIds()));
-      log("sys", "All servos off (torque released)");
+      log("sys", t("log.xarm.servosOff"));
     },
   };
 });

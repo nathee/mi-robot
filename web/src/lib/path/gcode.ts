@@ -17,6 +17,7 @@ import {
 } from "../kinematics/fk";
 import { isIkResultAcceptable, solveIKPoseCandidate } from "../kinematics/ik";
 import { APP_NAME } from "@/lib/appConfig";
+import { t } from "@/lib/i18n";
 
 const NUMBER_PATTERN = "[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?";
 const WORD_PATTERN = new RegExp(`([A-Z])\\s*=?\\s*(${NUMBER_PATTERN})`, "gi");
@@ -143,7 +144,7 @@ export function parseWlkataGcode(content: string): ParsedWlkataGcode {
       if (!Object.keys(axes).length) return;
 
       if (!space) {
-        warnings.push(`Line ${lineNumber}: axis values ignored because M20/M21 is missing`);
+        warnings.push(t("warn.axisIgnored", { n: lineNumber }));
         return;
       }
 
@@ -162,7 +163,7 @@ export function parseWlkataGcode(content: string): ParsedWlkataGcode {
     });
 
   if (!commands.length) {
-    throw new Error("No WLKATA M20/M21 motion commands were found");
+    throw new Error(t("err.noMotion"));
   }
   return { projectName, commands, warnings };
 }
@@ -312,41 +313,41 @@ export function parsePathProgramJson(content: string): ParsedPathProgram {
   try {
     doc = JSON.parse(String(content || ""));
   } catch {
-    throw new Error("The selected file is not valid JSON");
+    throw new Error(t("err.badJson"));
   }
   if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-    throw new Error("Path program must be a JSON object");
+    throw new Error(t("err.notObject"));
   }
   if (doc.format && doc.format !== "mirobot-path-program") {
-    throw new Error(`Unsupported path program format: ${String(doc.format)}`);
+    throw new Error(t("err.badFormat", { v: String(doc.format) }));
   }
   if (Number(doc.version || 1) > 1) {
-    throw new Error(`Path program version ${String(doc.version)} is not supported`);
+    throw new Error(t("err.badVersion", { v: String(doc.version) }));
   }
   if (!Array.isArray(doc.targets)) {
-    throw new Error("Path program has no target list");
+    throw new Error(t("err.noTargets"));
   }
   if (doc.targets.length > 500) {
-    throw new Error("Path program exceeds the 500 target limit");
+    throw new Error(t("err.tooManyTargets"));
   }
 
   const hasProjectName = Object.prototype.hasOwnProperty.call(doc, "projectName");
   const projectName = hasProjectName ? String(doc.projectName ?? "").trim() : "Untitled Project";
-  if (!projectName) throw new Error("Project name cannot be empty");
+  if (!projectName) throw new Error(t("err.projectNameEmpty"));
 
   const usedIds = new Set<number>();
   const targets: PathTarget[] = doc.targets.map((rawSource, index) => {
     const source = rawSource as Record<string, unknown>;
     const name = String(source?.name ?? "").trim();
-    if (!name) throw new Error(`Target ${index + 1} name cannot be empty`);
+    if (!name) throw new Error(t("err.targetNameEmpty", { n: index + 1 }));
 
     const joints = validatedPathJoints(source?.joints);
-    if (!joints) throw new Error(`Target ${name} contains invalid or out-of-limit joints`);
+    if (!joints) throw new Error(t("err.targetJoints", { name }));
 
     const pose = fkPose6DFromJointsDeg(joints);
     const workspace = checkWorkspaceXYZ(pose.x, pose.y, pose.z, DEFAULT_WORKSPACE);
     if (!workspace.ok) {
-      throw new Error(`Target ${name} is outside workspace: ${workspace.message}`);
+      throw new Error(t("err.targetOutside", { name, reason: workspace.message }));
     }
 
     let id = Math.trunc(Number(source?.id));
@@ -428,7 +429,7 @@ export function parseGcodePathProgram(
       });
       const valid = validatedPathJoints(nextJoints);
       if (!valid) {
-        throw new Error(`Line ${cmd.lineNumber} (${name}): joint values out of limits`);
+        throw new Error(t("err.lineJoints", { n: cmd.lineNumber, name }));
       }
       const pose = fkPose6DFromJointsDeg(valid);
       const ws = checkWorkspaceXYZ(pose.x, pose.y, pose.z, DEFAULT_WORKSPACE);
@@ -460,7 +461,7 @@ export function parseGcodePathProgram(
       }
       const solved = solveIKPoseCandidate(currentJoints, pose6DToTargetMatrix(nextPose), solver);
       if (!solved || !isIkResultAcceptable(solved.err)) {
-        throw new Error(`Line ${cmd.lineNumber} (${name}): IK solution not found`);
+        throw new Error(t("err.lineNoIk", { n: cmd.lineNumber, name }));
       }
       currentJoints = solved.q;
       currentPose = fkPose6DFromJointsDeg(solved.q);

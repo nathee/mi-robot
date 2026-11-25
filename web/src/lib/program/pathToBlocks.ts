@@ -1,6 +1,7 @@
 import type { PathProgramSettings, PathTarget } from "@/lib/kinematics/constants";
 import { nextBlockId } from "./blocks";
 import type { ProgramBlock } from "./types";
+import { t } from "@/lib/i18n";
 
 export interface PathToBlocksResult {
   blocks: ProgramBlock[];
@@ -24,7 +25,7 @@ export function pathTargetsToBlocks(params: {
   const linearSpeed = Number(settings.linearSpeedMmPerSec.toFixed(1));
 
   if (settings.motionType === "MOVEC") {
-    warnings.push("MoveC arcs are not supported in Blocks; waypoints were converted to MoveL segments.");
+    warnings.push(t("warn.movecToBlocks"));
   }
 
   const moves: ProgramBlock[] = targets.map((t) => {

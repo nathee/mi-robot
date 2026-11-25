@@ -14,7 +14,7 @@ import {
   pose6DToTargetMatrix,
   setActiveToolOffsetMm,
 } from "@/lib/kinematics/fk";
-import { DEFAULT_TOOL, TOOL_DEFS, toolCodeFor, type ToolType } from "@/lib/tools/toolDefs";
+import { DEFAULT_TOOL, TOOL_DEFS, toolCodeFor, toolText, type ToolType } from "@/lib/tools/toolDefs";
 import {
   isIkResultAcceptable,
   isOrientationBestEffort,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/kinematics/ik";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { t } from "@/lib/i18n";
 
 export interface IkErrorState {
   posMm: number;
@@ -114,7 +115,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     if (options.log && Math.abs(nextVal - prev) > 0.005) {
       useSerialStore.getState().appendLog({
         dir: "sys",
-        text: `Jog J${index + 1}: ${prev.toFixed(2)}° -> ${nextVal.toFixed(2)}°`,
+        text: t("log.jog", { j: index + 1, from: prev.toFixed(2), to: nextVal.toFixed(2) }),
       });
     }
   },
@@ -151,7 +152,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     });
     useSerialStore.getState().appendLog({
       dir: "sys",
-      text: `Set Home configuration (q=[${homeJoints.join(",")}])`,
+      text: t("log.robot.home", { q: homeJoints.join(",") }),
     });
   },
 
@@ -168,7 +169,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
       dir: "sys",
       text:
         options.label ??
-        `${def.label}: ${state === "CLOSE" ? def.grabLabel : def.releaseLabel} (${toolCodeFor(def.type, state)})`,
+        `${toolText(def.type, "label")}: ${toolText(def.type, state === "CLOSE" ? "grabLabel" : "releaseLabel")} (${toolCodeFor(def.type, state)})`,
     });
   },
 
@@ -183,7 +184,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     if (options.log !== false) {
       useSerialStore.getState().appendLog({
         dir: "sys",
-        text: `Tool changed: ${TOOL_DEFS[prev].label} -> ${def.label} (TCP offset ${def.tcpOffsetMm} mm)`,
+        text: t("log.robot.toolChanged", { from: toolText(prev, "label"), to: toolText(def.type, "label"), mm: def.tcpOffsetMm }),
       });
     }
   },
@@ -297,7 +298,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
       const changed = axes.filter((ax) => Math.abs(nextEePose[ax] - fromPose[ax]) > 0.005);
       if (changed.length) {
         const msg = changed
-          .map((ax) => `Jog ${formatJogAxis(ax, fromPose[ax])} -> ${formatJogAxis(ax, nextEePose[ax])}`)
+          .map((ax) => t("log.robot.jogAxis", { from: formatJogAxis(ax, fromPose[ax]), to: formatJogAxis(ax, nextEePose[ax]) }))
           .join(" | ");
         useSerialStore.getState().appendLog({ dir: "sys", text: msg });
       }

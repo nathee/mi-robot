@@ -18,6 +18,7 @@ import { usePathStore } from "./usePathStore";
 import { useProjectStore } from "./useProjectStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
+import { t } from "@/lib/i18n";
 
 interface HistoryState {
   entries: WorkspaceHistoryEntry[];
@@ -119,7 +120,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const draft = loadAutosaveFromStorage();
 
     if (draft && (draft.robotModel ?? "mirobot") === getActiveRobotProfile().id) {
-      get().applySnapshot(draft, `Restored previous session "${draft.projectName}"`);
+      get().applySnapshot(draft, t("log.history.restoredSession", { name: draft.projectName }));
     }
 
     set({
@@ -135,7 +136,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     saveAutosaveToStorage(snap);
   },
 
-  saveToHistory(note = "Manual save") {
+  saveToHistory(note = t("history.manualSave")) {
     const snap = get().captureCurrentSnapshot();
     const now = Date.now();
     const entry: WorkspaceHistoryEntry = {
@@ -153,7 +154,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ entries: nextEntries, lastSavedAt: now });
     useSerialStore.getState().appendLog({
       dir: "ok",
-      text: `Saved "${snap.projectName}" to work history (${note})`,
+      text: t("log.history.saved", { name: snap.projectName, note }),
     });
     return entry;
   },
@@ -161,7 +162,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   restoreFromHistory(id) {
     const entry = get().entries.find((e) => e.id === id);
     if (!entry) return false;
-    get().applySnapshot(entry.data, `Restored "${entry.data.projectName}" from history`);
+    get().applySnapshot(entry.data, t("log.history.restored", { name: entry.data.projectName }));
     saveAutosaveToStorage(entry.data);
     return true;
   },
@@ -175,7 +176,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   clearHistory() {
     saveHistoryToStorage([]);
     set({ entries: [] });
-    useSerialStore.getState().appendLog({ dir: "sys", text: "Cleared local work history" });
+    useSerialStore.getState().appendLog({ dir: "sys", text: t("log.history.cleared") });
   },
 
   resetWorkspace() {

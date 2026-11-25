@@ -10,6 +10,7 @@ import { useProjectStore } from "./useProjectStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { t } from "@/lib/i18n";
 
 interface RobotModelState {
   /** Robot the simulator is running, or null until one has been chosen. */
@@ -37,7 +38,7 @@ export function activateRobotModel(model: RobotModelId): void {
     robot.setToolType(profile.defaultTool, { log: false });
   }
   robot.setJoints(profile.home, { syncIk: true });
-  useSerialStore.getState().appendLog({ dir: "sys", text: `Robot: ${profile.name}` });
+  useSerialStore.getState().appendLog({ dir: "sys", text: t("log.model.robot", { name: profile.name }) });
 }
 
 function readPendingModel(): RobotModelId | null {
@@ -98,7 +99,7 @@ export const useRobotModelStore = create<RobotModelState>((set, get) => ({
     }
     useSerialStore
       .getState()
-      .appendLog({ dir: "sys", text: `Switching robot to ${ROBOT_PROFILES[model].name}…` });
+      .appendLog({ dir: "sys", text: t("log.model.switching", { name: ROBOT_PROFILES[model].name }) });
     window.location.reload();
   },
 
