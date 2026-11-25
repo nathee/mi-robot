@@ -34,7 +34,7 @@ import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
 import { SAMPLE_SCRIPTS } from "@/lib/program/scriptCompiler";
 import type { CodeEditorMode, ProgramBlock } from "@/lib/program/types";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
-import { TOOL_DEFS, type ToolType } from "@/lib/tools/toolDefs";
+import { toolText, type ToolType } from "@/lib/tools/toolDefs";
 import { useCodeStore } from "@/stores/useCodeStore";
 import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
@@ -44,6 +44,8 @@ import { triggerTextDownload } from "./Toolbar";
 /** Same text on server and client (no hydration mismatch); ⌘ on macOS, Ctrl elsewhere. */
 const MOD_KEY = "⌘/Ctrl";
 import { NumericInput } from "./ui";
+import { useT } from "@/lib/i18n/useT";
+import type { MessageKey } from "@/lib/i18n";
 
 const STATUS_BADGE: Record<string, string> = {
   IDLE: "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
@@ -73,6 +75,18 @@ interface BlockCardProps {
   onDrop?: () => void;
 }
 
+const BLOCK_TITLE_KEYS: Record<ProgramBlock["kind"], MessageKey> = {
+  HOME: "code.blockHome",
+  MOVE_JOINT: "code.titleMoveJoint",
+  MOVE_LINEAR: "code.titleMoveLinear",
+  WAIT: "code.blockWait",
+  GRIPPER: "xarm.gripper",
+  CONVEYOR: "code.blockConveyor",
+  TOOL: "code.titleTool",
+  WAIT_SENSOR: "code.titleWaitSensor",
+  REPEAT: "code.titleRepeat",
+};
+
 function BlockCard({
   block,
   index,
@@ -84,6 +98,7 @@ function BlockCard({
   onDragOver,
   onDrop,
 }: BlockCardProps) {
+  const t = useT();
   const updateBlock = useCodeStore((s) => s.updateBlock);
   const removeBlock = useCodeStore((s) => s.removeBlock);
   const duplicateBlock = useCodeStore((s) => s.duplicateBlock);
@@ -157,23 +172,7 @@ function BlockCard({
             #{index + 1}
           </span>
           <span className="truncate font-semibold text-slate-900 dark:text-slate-100">
-            {block.kind === "HOME"
-              ? "Home"
-              : block.kind === "MOVE_JOINT"
-                ? "Move Joint"
-                : block.kind === "MOVE_LINEAR"
-                  ? "Move Linear"
-                  : block.kind === "WAIT"
-                    ? "Wait"
-                    : block.kind === "GRIPPER"
-                      ? "Gripper"
-                      : block.kind === "CONVEYOR"
-                        ? "Conveyor"
-                        : block.kind === "TOOL"
-                          ? "Change Tool"
-                          : block.kind === "WAIT_SENSOR"
-                            ? "Wait Light Sensor"
-                            : "Repeat Loop"}
+            {t(BLOCK_TITLE_KEYS[block.kind])}
           </span>
         </div>
 
@@ -183,18 +182,18 @@ function BlockCard({
               type="button"
               disabled={isLocked}
               onClick={captureCurrentIntoBlock}
-              title="Set this block to the robot's current pose"
+              title={t("code.usePoseTitle")}
               className="rounded-lg bg-sky-500/10 px-2 py-1 text-[11px] font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
             >
-              Use Pose
+              {t("code.usePose")}
             </button>
           )}
           <button
             type="button"
             disabled={isLocked}
             onClick={() => duplicateBlock(block.id)}
-            title="Duplicate block"
-            aria-label="Duplicate block"
+            title={t("code.duplicate")}
+            aria-label={t("code.duplicate")}
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600 disabled:opacity-35 dark:hover:bg-sky-950/50 dark:hover:text-sky-400"
           >
             <Copy className="h-3.5 w-3.5" />
@@ -203,8 +202,8 @@ function BlockCard({
             type="button"
             disabled={isLocked}
             onClick={() => removeBlock(block.id)}
-            title="Remove block"
-            aria-label="Remove block"
+            title={t("code.removeBlock")}
+            aria-label={t("code.removeBlock")}
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-35 dark:hover:bg-rose-950/50"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -244,9 +243,9 @@ function BlockCard({
             ))}
           </div>
           <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Speed (°/s)</span>
+            <span>{t("code.speedDeg")}</span>
             <NumericInput
-              aria-label="Joint speed"
+              aria-label={t("code.jointSpeed")}
               min={5}
               max={180}
               step={5}
@@ -294,9 +293,9 @@ function BlockCard({
             ))}
           </div>
           <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Speed (mm/s)</span>
+            <span>{t("code.speedMm")}</span>
             <NumericInput
-              aria-label="Linear speed"
+              aria-label={t("code.linearSpeed")}
               min={5}
               max={500}
               step={5}
@@ -316,9 +315,9 @@ function BlockCard({
 
       {block.kind === "WAIT" && (
         <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <span>Delay</span>
+          <span>{t("code.delay")}</span>
           <NumericInput
-            aria-label="Wait seconds"
+            aria-label={t("code.waitSeconds")}
             min={0.1}
             max={60}
             step={0.1}
@@ -353,7 +352,7 @@ function BlockCard({
                   : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
-              OPEN (M5)
+              {t("code.open")} (M5)
             </button>
             <button
               type="button"
@@ -369,7 +368,7 @@ function BlockCard({
                   : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
-              CLOSE (M3)
+              {t("code.close")} (M3)
             </button>
           </div>
         </div>
@@ -393,12 +392,12 @@ function BlockCard({
             }
             className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
-            <option value="MOVE">Move by (D)</option>
-            <option value="SPEED">Speed % (G6 F)</option>
-            <option value="AUTO">Auto-feed %</option>
+            <option value="MOVE">{t("code.convMove")}</option>
+            <option value="SPEED">{t("code.convSpeed")}</option>
+            <option value="AUTO">{t("code.convAuto")}</option>
           </select>
           <NumericInput
-            aria-label="Conveyor value"
+            aria-label={t("code.convValue")}
             disabled={isLocked}
             step={block.mode === "MOVE" ? 10 : 5}
             precision={0}
@@ -426,12 +425,12 @@ function BlockCard({
             }
             className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
-            <option value="BLOCKED">Box arrives</option>
-            <option value="CLEAR">Beam clear</option>
+            <option value="BLOCKED">{t("code.boxArrives")}</option>
+            <option value="CLEAR">{t("tool.beamClear")}</option>
           </select>
           <span className="text-slate-500">timeout</span>
           <NumericInput
-            aria-label="Sensor timeout seconds"
+            aria-label={t("code.sensorTimeout")}
             disabled={isLocked}
             min={1}
             max={300}
@@ -461,9 +460,9 @@ function BlockCard({
             }
             className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
-            {getActiveRobotProfile().allowedTools.map((t) => (
-              <option key={t} value={t}>
-                {TOOL_DEFS[t].label}
+            {getActiveRobotProfile().allowedTools.map((tool) => (
+              <option key={tool} value={tool}>
+                {toolText(tool, "label")}
               </option>
             ))}
           </select>
@@ -474,9 +473,9 @@ function BlockCard({
         <div className="mt-2.5 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-              <span>Times</span>
+              <span>{t("code.times")}</span>
               <NumericInput
-                aria-label="Repeat times"
+                aria-label={t("code.repeatTimes")}
                 min={1}
                 max={50}
                 step={1}
@@ -548,7 +547,7 @@ function BlockCard({
                 }
                 className="rounded-lg bg-orange-500/10 px-2 py-1 text-[11px] font-semibold text-orange-600 transition hover:bg-orange-500/20 dark:text-orange-400"
               >
-                + Grip
+                + {t("code.grip")}
               </button>
               <button
                 type="button"
@@ -558,7 +557,7 @@ function BlockCard({
                 }
                 className="rounded-lg bg-amber-500/10 px-2 py-1 text-[11px] font-semibold text-amber-600 transition hover:bg-amber-500/20 dark:text-amber-400"
               >
-                + Wait
+                + {t("code.blockWait")}
               </button>
             </div>
           </div>
@@ -566,7 +565,7 @@ function BlockCard({
           <div className="space-y-2 border-l-2 border-purple-500/35 pl-2.5">
             {block.children.length === 0 ? (
               <div className="py-1.5 text-[11px] text-slate-400">
-                Empty loop — add a child block above.
+                {t("code.emptyLoop")}
               </div>
             ) : (
               block.children.map((child, cIdx) => (
@@ -703,6 +702,7 @@ function LineCodeEditor({
 }
 
 export function CodePanel() {
+  const t = useT();
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
@@ -748,12 +748,12 @@ export function CodePanel() {
   const handleExportGcode = () => {
     const gcode = getExportableGcode();
     if (!gcode) {
-      appendLog({ dir: "error", text: "[CODE] Fix syntax errors before exporting G-code" });
+      appendLog({ dir: "error", text: `[CODE] ${t("log.fixSyntax")}` });
       return;
     }
     const slug = projectName.replace(/[^a-zA-Z0-9._-]+/g, "_") || "mirobot-code";
     triggerTextDownload(`${slug}.gcode`, gcode, "text/plain");
-    appendLog({ dir: "ok", text: `[CODE] Exported ${slug}.gcode` });
+    appendLog({ dir: "ok", text: `[CODE] ${t("log.exported", { file: `${slug}.gcode` })}` });
   };
 
   return (
@@ -762,7 +762,7 @@ export function CodePanel() {
       <div className="grid shrink-0 grid-cols-3 rounded-xl border border-slate-200/80 bg-slate-200/60 p-1 dark:border-slate-800 dark:bg-slate-900">
         {(
           [
-            { id: "BLOCKS", label: "Blocks", icon: Blocks },
+            { id: "BLOCKS", label: t("code.tabBlocks"), icon: Blocks },
             { id: "SCRIPT", label: "Script", icon: Code2 },
             { id: "GCODE", label: "G-code", icon: FileCode2 },
           ] as Array<{ id: CodeEditorMode; label: string; icon: typeof Blocks }>
@@ -786,7 +786,7 @@ export function CodePanel() {
       {/* Run / Step / Stop / Export Bar */}
       <div className="shrink-0 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs dark:border-slate-800/90 dark:bg-slate-900/75">
         <div className="mb-2.5 flex items-center justify-between">
-          <span className="font-semibold text-slate-900 dark:text-slate-100">Runner</span>
+          <span className="font-semibold text-slate-900 dark:text-slate-100">{t("code.runner")}</span>
           <span
             className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${STATUS_BADGE[status] ?? STATUS_BADGE.IDLE}`}
           >
@@ -803,14 +803,14 @@ export function CodePanel() {
             }`}
           >
             {isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            <span>{isRunning ? "Pause" : "Run Code"}</span>
+            <span>{isRunning ? t("path.pause") : t("code.run")}</span>
           </button>
 
           <button
             type="button"
             onClick={stepOnce}
-            title="Execute next step"
-            aria-label="Execute next step"
+            title={t("code.stepNext")}
+            aria-label={t("code.stepNext")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <SkipForward className="h-4 w-4" />
@@ -819,9 +819,9 @@ export function CodePanel() {
           <button
             type="button"
             disabled={status === "IDLE"}
-            onClick={() => stop("Stopped program")}
-            title="Stop execution"
-            aria-label="Stop execution"
+            onClick={() => stop(t("log.stoppedProgram"))}
+            title={t("code.stopExec")}
+            aria-label={t("code.stopExec")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-35 dark:text-rose-400"
           >
             <Square className="h-4 w-4" />
@@ -830,8 +830,8 @@ export function CodePanel() {
           <button
             type="button"
             onClick={handleExportGcode}
-            title="Export as WLKATA .gcode file"
-            aria-label="Export as G-code file"
+            title={t("code.exportTitle")}
+            aria-label={t("code.exportTitle")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <Download className="h-4 w-4" />
@@ -843,7 +843,7 @@ export function CodePanel() {
           <div className="mt-3">
             <div className="flex justify-between gap-2 font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
               <span className="truncate">
-                Step {activeStepIndex + 1}/{compiledSteps.length}: {activeStep.label}
+                {t("code.stepOf", { i: activeStepIndex + 1, n: compiledSteps.length })}: {activeStep.label}
               </span>
               <span className="shrink-0">{Math.round(stepProgress * 100)}%</span>
             </div>
@@ -864,7 +864,7 @@ export function CodePanel() {
             <div key={i} className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                <strong>Line {err.line}:</strong> {err.message}
+                <strong>{t("code.line", { n: err.line })}:</strong> {err.message}
               </span>
             </div>
           ))}
@@ -876,14 +876,14 @@ export function CodePanel() {
         <div className="space-y-4">
           <section className="space-y-2">
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <span>Add Block</span>
+              <span>{t("code.addBlock")}</span>
               <div className="flex items-center gap-1 normal-case tracking-normal">
                 <button
                   type="button"
                   disabled={isLocked || !canUndoBlocks}
                   onClick={undoBlocks}
-                  title={`Undo block edit (${MOD_KEY}+Z)`}
-                  aria-label="Undo block edit"
+                  title={`${t("code.undoBlock")} (${MOD_KEY}+Z)`}
+                  aria-label={t("code.undoBlock")}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 >
                   <Undo2 className="h-3.5 w-3.5" />
@@ -892,8 +892,8 @@ export function CodePanel() {
                   type="button"
                   disabled={isLocked || !canRedoBlocks}
                   onClick={redoBlocks}
-                  title={`Redo block edit (${MOD_KEY}+Y / ${MOD_KEY}+Shift+Z)`}
-                  aria-label="Redo block edit"
+                  title={`${t("code.redoBlock")} (${MOD_KEY}+Y / ${MOD_KEY}+Shift+Z)`}
+                  aria-label={t("code.redoBlock")}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 >
                   <Redo2 className="h-3.5 w-3.5" />
@@ -906,7 +906,7 @@ export function CodePanel() {
                   className="inline-flex items-center gap-1 text-sky-600 hover:underline disabled:opacity-40 dark:text-sky-400"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  Load Demo
+                  {t("code.loadDemo")}
                 </button>
               </div>
             </div>
@@ -918,7 +918,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <Home className="h-3.5 w-3.5 text-sky-500" />
-                Home
+                {t("code.blockHome")}
               </button>
               <button
                 type="button"
@@ -945,7 +945,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <Clock className="h-3.5 w-3.5 text-amber-500" />
-                Wait
+                {t("code.blockWait")}
               </button>
               <button
                 type="button"
@@ -956,7 +956,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <Grip className="h-3.5 w-3.5 text-orange-500" />
-                Gripper
+                {t("xarm.gripper")}
               </button>
               <button
                 type="button"
@@ -967,7 +967,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <MoveHorizontal className="h-3.5 w-3.5 text-teal-500" />
-                Conveyor
+                {t("code.blockConveyor")}
               </button>
               <button
                 type="button"
@@ -983,7 +983,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <ScanLine className="h-3.5 w-3.5 text-cyan-500" />
-                Sensor
+                {t("code.blockSensor")}
               </button>
               <button
                 type="button"
@@ -998,7 +998,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <Wrench className="h-3.5 w-3.5 text-rose-500" />
-                Tool
+                {t("joint.tool")}
               </button>
               <button
                 type="button"
@@ -1009,7 +1009,7 @@ export function CodePanel() {
                 className={PALETTE_BTN}
               >
                 <Repeat className="h-3.5 w-3.5 text-purple-500" />
-                Repeat
+                {t("path.repeat")}
               </button>
             </div>
           </section>
@@ -1022,7 +1022,7 @@ export function CodePanel() {
               onClick={convertBlocksToScript}
               className="inline-flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-medium text-slate-600 shadow-2xs transition hover:border-sky-400/70 hover:text-sky-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-sky-400"
             >
-              <span>To Script</span>
+              <span>{t("code.toScript")}</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
             <button
@@ -1031,7 +1031,7 @@ export function CodePanel() {
               onClick={convertBlocksToGcode}
               className="inline-flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white text-xs font-medium text-slate-600 shadow-2xs transition hover:border-sky-400/70 hover:text-sky-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-sky-400"
             >
-              <span>To G-code</span>
+              <span>{t("code.toGcode")}</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1039,11 +1039,11 @@ export function CodePanel() {
           {/* Block Stack */}
           <section className="space-y-2">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Program Blocks ({blocks.length})
+              {t("code.programBlocks", { n: blocks.length })}
             </div>
             {blocks.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-5 text-center text-xs text-slate-500 dark:border-slate-700/80 dark:bg-slate-900/40 dark:text-slate-400">
-                No blocks yet. Pick a block above or click <strong>Load Demo</strong>.
+                {t("code.noBlocksA")}<strong>{t("code.loadDemo")}</strong>{t("code.noBlocksB")}
               </div>
             ) : (
               <div className="space-y-2">
@@ -1078,7 +1078,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("JOINT")}
-                title="Insert moveJ() with current robot joint angles"
+                title={t("code.insertMoveJ")}
                 className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
               >
                 <Plus className="h-3.5 w-3.5 text-blue-500" />
@@ -1088,7 +1088,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("LINEAR")}
-                title="Insert moveL() with current robot TCP pose"
+                title={t("code.insertMoveL")}
                 className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
               >
                 <Plus className="h-3.5 w-3.5 text-emerald-500" />
@@ -1097,7 +1097,7 @@ export function CodePanel() {
             </div>
 
             <select
-              aria-label="Load sample script"
+              aria-label={t("code.loadSampleScript")}
               defaultValue=""
               onChange={(e) => {
                 const sample = SAMPLE_SCRIPTS[e.target.value];
@@ -1107,7 +1107,7 @@ export function CodePanel() {
               className="h-8 min-w-[148px] max-w-[200px] truncate rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs outline-none focus:border-sky-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
             >
               <option value="" disabled>
-                Load sample…
+                {t("code.loadSample")}
               </option>
               {Object.entries(SAMPLE_SCRIPTS).map(([k, s]) => (
                 <option key={k} value={k}>
@@ -1133,14 +1133,14 @@ export function CodePanel() {
               onClick={() => setShowHelp((v) => !v)}
               className="text-xs font-medium text-slate-500 transition hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400"
             >
-              {showHelp ? "Hide syntax" : "Syntax reference"}
+              {showHelp ? t("code.hideSyntax") : t("code.syntaxRef")}
             </button>
             <button
               type="button"
               onClick={convertScriptToGcode}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-sky-500/35 bg-sky-500/10 px-3 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
             >
-              <span>Convert → G-code</span>
+              <span>{t("code.convertGcode")}</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1165,10 +1165,10 @@ export function CodePanel() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Insert Command
+                {t("code.insertCommand")}
               </span>
               <select
-                aria-label="Load sample G-code"
+                aria-label={t("code.loadSampleGcode")}
                 defaultValue=""
                 onChange={(e) => {
                   const sample = SAMPLE_GCODE_PROGRAMS[e.target.value];
@@ -1178,7 +1178,7 @@ export function CodePanel() {
                 className="h-8 min-w-[148px] max-w-[200px] truncate rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs outline-none focus:border-sky-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
               >
                 <option value="" disabled>
-                  Load sample…
+                  {t("code.loadSample")}
                 </option>
                 {Object.entries(SAMPLE_GCODE_PROGRAMS).map(([k, s]) => (
                   <option key={k} value={k}>
@@ -1193,7 +1193,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("JOINT")}
-                title="Insert M21 Joint move with current angles"
+                title={t("code.insertM21")}
                 className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-blue-400"
               >
                 <Plus className="h-3.5 w-3.5 text-blue-500" />
@@ -1203,7 +1203,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => insertCurrentPose("LINEAR")}
-                title="Insert M20 Linear move with current TCP pose"
+                title={t("code.insertM20")}
                 className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-emerald-400 hover:text-emerald-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-emerald-400"
               >
                 <Plus className="h-3.5 w-3.5 text-emerald-500" />
@@ -1213,7 +1213,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "G4 P0.5"))}
-                title="Append 0.5s dwell (G4 P0.5)"
+                title={t("code.appendDwell")}
                 className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-amber-400 hover:text-amber-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-amber-400"
               >
                 G4
@@ -1222,7 +1222,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "M3 S1000"))}
-                title="Append Gripper Close / Pump ON (M3 S1000)"
+                title={t("code.appendClose")}
                 className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-orange-400 hover:text-orange-600 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-orange-400"
               >
                 M3
@@ -1231,7 +1231,7 @@ export function CodePanel() {
                 type="button"
                 disabled={isLocked}
                 onClick={() => setGcodeText(appendLine(gcodeText, "M5"))}
-                title="Append Gripper Open / Pump OFF (M5)"
+                title={t("code.appendOpen")}
                 className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:border-slate-400 disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
               >
                 M5

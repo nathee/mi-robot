@@ -149,7 +149,6 @@ export function ToolPanel() {
   const autoFeed = useWorkcellStore((s) => s.autoFeed);
   const wc = useWorkcellStore.getState;
 
-  const def = TOOL_DEFS[toolType];
   const held = boxes.find((b) => b.held);
   const speedPercent = Math.round((runtime.speedMmS / 50) * 100);
   const moving = runtime.speedMmS !== 0 || runtime.targetMm !== null;
