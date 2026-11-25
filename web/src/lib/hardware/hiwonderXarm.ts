@@ -1,13 +1,12 @@
 /**
- * Hiwonder / LewanSoul xArm controller-board protocol (bus servos behind a USB-HID / UART board).
+ * Hiwonder / LewanSoul xArm controller-board protocol.
  *
- * Frame: 0x55 0x55 <len> <cmd> <data…>, where len = data.length + 2. No checksum.
- * Over USB-HID the frame goes in output report 0, zero-padded to 64 bytes. Over UART: 9600 baud.
- * Positions are 0..1000 servo units, 500 = 0°, 4 units per degree (±125°). All 16-bit values
- * are little-endian.
+ * Supports two controller boards:
+ * 1. CoreX (ESP32 MicroPython @ 115200 baud) forwarding to STM32F104 LSC via `Hiwonder.LSC`
+ *    (standard on xArm 2.0 USB Type-C port).
+ * 2. Legacy STM32 binary frame protocol (`0x55 0x55 <len> <cmd> <data…>`) over USB-HID or 9600 UART.
  *
- * Source: the open-source xArm Python driver (ccourson/Hiwonder-xArm1S, controller.py). The xArm
- * 2.0 board is assumed to speak the same protocol; verify with the "Read positions" button first.
+ * Positions are 0..1000 servo units, 500 = 0°, 4 units per degree (±125°).
  */
 import type { BusServoGripperMap, BusServoJointMap } from "@/lib/robots/types";
 
@@ -15,7 +14,9 @@ export const XARM_HID_VENDOR_ID = 0x0483;
 export const XARM_HID_PRODUCT_ID = 0x5750;
 export const XARM_HID_REPORT_ID = 0;
 export const XARM_HID_REPORT_SIZE = 64;
-export const XARM_UART_BAUD = 9600;
+export const XARM_UART_BAUD = 115200;
+
+export type XarmSerialProtocol = "COREX_REPL" | "LSC_BINARY";
 
 export const XARM_CMD = {
   SERVO_MOVE: 0x03,
@@ -132,6 +133,52 @@ export function buildPoseMovePacket(
   const targets = maps.map((m) => ({ id: m.servoId, pos: jointDegToServoPos(joints[m.jointIndex] ?? 0, m) }));
   if (gripper) targets.push({ id: gripper.map.servoId, pos: gripperServoPos(gripper.closed, gripper.map) });
   return buildMovePacket(targets, durationMs);
+}
+
+/** Converts asimulator joint vector + gripper state into `{ id, pos }` servo targets. */
+export function buildPoseTargets(
+  joints: readonly number[],
+  maps: readonly BusServoJointMap[],
+  gripper?: { map: BusServoGripperMap; closed: boolean }
+): Array<{ id: number; pos: number }> {
+  const targets = maps.map((m) => ({ id: m.servoId, pos: jointDegToServoPos(joints[m.jointIndex] ?? 0, m) }));
+  if (gripper) targets.push({ id: gripper.map.servoId, pos: gripperServoPos(gripper.closed, gripper.map) });
+  return targets;
+}
+
+/**
+ * Formats a CoreX MicroPython `LSC.moveServos(((id,pos),...), duration_ms)` REPL line.
+ * Compatible with Hiwonder xArm 2.0 (CoreX ESP32 + STM32F104 LSC servo controller).
+ */
+export function buildReplMoveServosLine(
+  targets: ReadonlyArray<{ id: number; pos: number }>,
+  durationMs: number
+): string {
+  const dur = Math.max(20, Math.min(30000, Math.round(durationMs)));
+  const pairs = targets
+    .filter((t) => t.id >= 1 && t.id <= 6)
+    .map((t) => `(${t.id},${clampServoPos(t.pos)})`);
+  if (pairs.length === 0) return "";
+  const inner = pairs.join(",") + (pairs.length === 1 ? "," : "");
+  return `LSC.moveServos((${inner}), ${dur})`;
+}
+
+/** Formats a CoreX MicroPython `LSC.moveServo(id, duration_ms, pos)` REPL line. */
+export function buildReplMoveSingleServoLine(id: number, pos: number, durationMs: number): string {
+  const dur = Math.max(20, Math.min(30000, Math.round(durationMs)));
+  return `LSC.moveServo(${id}, ${dur}, ${clampServoPos(pos)})`;
+}
+
+/** Formats a CoreX MicroPython `LSC.runActionGroup(group_id, times)` REPL line. */
+export function buildReplRunActionGroupLine(groupId: number, times = 1): string {
+  const gid = Math.max(0, Math.min(255, Math.round(groupId)));
+  const n = Math.max(0, Math.min(65535, Math.round(times)));
+  return `LSC.runActionGroup(${gid}, ${n})`;
+}
+
+/** Formats a CoreX MicroPython `LSC.stopRunning()` REPL line. */
+export function buildReplStopLine(): string {
+  return "LSC.stopRunning()";
 }
 
 /** Simulator joint vector from servo positions; joints without a reading keep `fallback`. */

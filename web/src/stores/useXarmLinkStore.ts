@@ -5,9 +5,14 @@ import {
   XARM_HID_REPORT_ID,
   XARM_HID_VENDOR_ID,
   XARM_UART_BAUD,
+  type XarmSerialProtocol,
   buildBatteryPacket,
   buildPoseMovePacket,
+  buildPoseTargets,
   buildReadPositionsPacket,
+  buildReplMoveServosLine,
+  buildReplRunActionGroupLine,
+  buildReplStopLine,
   buildServoOffPacket,
   extractFrames,
   formatFrameHex,
@@ -51,6 +56,7 @@ export interface XarmTransport {
 interface XarmLinkState {
   connected: boolean;
   transport: XarmTransportKind;
+  serialProtocol: XarmSerialProtocol;
   deviceLabel: string;
   baudRate: number;
   /** Stream every simulator pose change to the servos. */
@@ -65,6 +71,7 @@ interface XarmLinkState {
   lastError: string;
 
   setBaudRate: (baud: number) => void;
+  setSerialProtocol: (protocol: XarmSerialProtocol) => void;
   connectHid: () => Promise<void>;
   connectSerial: () => Promise<void>;
   /** Wires an already-open transport (used by connectHid / connectSerial, and by tests). */
@@ -80,6 +87,8 @@ interface XarmLinkState {
   readPositions: () => Promise<void>;
   readBattery: () => Promise<void>;
   servoOff: () => Promise<void>;
+  runActionGroup: (groupId: number, times?: number) => Promise<void>;
+  stopActionGroup: () => Promise<void>;
 }
 
 const MIRROR_INTERVAL_MS = 50;
@@ -116,13 +125,18 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+let replTextBuffer = "";
+
 export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
-  const send = async (frame: Uint8Array, opts: { quiet?: boolean } = {}) => {
+  const send = async (frame: Uint8Array, opts: { quiet?: boolean; logText?: string } = {}) => {
     if (!transport) return;
     try {
       await transport.send(frame);
       set((s) => ({ txCount: s.txCount + 1 }));
-      if (!opts.quiet) log("out", formatFrameHex(frame));
+      if (!opts.quiet) log("out", opts.logText ?? formatFrameHex(frame));
     } catch (err) {
       const msg = errorMessage(err, t("log.xarm.sendFailed"));
       set({ lastError: msg });
@@ -130,12 +144,25 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     }
   };
 
+  const isReplMode = () => get().transport === "SERIAL" && get().serialProtocol === "COREX_REPL";
+
+  const sendReplLine = (line: string, opts: { quiet?: boolean } = {}) => {
+    const trimmed = line.trim();
+    if (!trimmed) return Promise.resolve();
+    return send(encoder.encode(`${trimmed}\r\n`), { quiet: opts.quiet, logText: trimmed });
+  };
+
   const movePose = (joints: readonly number[], gripperClosed: boolean, durationMs: number, quiet: boolean) => {
     const { joints: maps, gripper } = busServos();
     lastSentJoints = joints.slice();
     lastSentGripperClosed = gripperClosed;
+    const dur = Math.round(durationMs);
+    if (isReplMode()) {
+      const targets = buildPoseTargets(joints, maps, { map: gripper, closed: gripperClosed });
+      return sendReplLine(buildReplMoveServosLine(targets, dur), { quiet });
+    }
     return send(
-      buildPoseMovePacket(joints, maps, Math.round(durationMs), { map: gripper, closed: gripperClosed }),
+      buildPoseMovePacket(joints, maps, dur, { map: gripper, closed: gripperClosed }),
       { quiet }
     );
   };
@@ -179,6 +206,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     unsubscribeRobot = null;
     transport = null;
     uartRest = new Uint8Array(0);
+    replTextBuffer = "";
     lastSentJoints = null;
     lastSentGripperClosed = null;
     applyNextPositions = false;
@@ -187,6 +215,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
   return {
     connected: false,
     transport: "NONE",
+    serialProtocol: "COREX_REPL",
     deviceLabel: "",
     baudRate: XARM_UART_BAUD,
     mirror: false,
@@ -199,6 +228,13 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
 
     setBaudRate(baudRate) {
       set({ baudRate });
+    },
+
+    setSerialProtocol(serialProtocol) {
+      set({
+        serialProtocol,
+        baudRate: serialProtocol === "COREX_REPL" ? 115200 : 9600,
+      });
     },
 
     async connectHid() {
@@ -255,14 +291,28 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       }
       try {
         const baud = get().baudRate;
+        const proto = get().serialProtocol;
         const port = await serial.requestPort();
         await port.open({ baudRate: baud });
         const writer = port.writable?.getWriter() ?? null;
         const reader = port.readable?.getReader() ?? null;
         let open = true;
+
+        if (proto === "COREX_REPL" && writer) {
+          await sleep(100);
+          await writer.write(encoder.encode("\x03\r\n"));
+          await sleep(80);
+          await writer.write(encoder.encode("\x03\r\n"));
+          await sleep(80);
+          await writer.write(encoder.encode("import Hiwonder\r\n"));
+          await sleep(100);
+          await writer.write(encoder.encode("from Hiwonder import LSC\r\n"));
+          await sleep(150);
+        }
+
         get().attachTransport({
           kind: "SERIAL",
-          label: `USB serial @ ${baud}`,
+          label: proto === "COREX_REPL" ? `CoreX REPL @ ${baud}` : `USB serial @ ${baud}`,
           send: async (frame) => {
             if (!writer) throw new Error(t("log.serialNotWritable"));
             await writer.write(frame);
@@ -306,7 +356,9 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         if (s.joints !== prev.joints || s.gripperState !== prev.gripperState) scheduleMirror();
       });
       log("ok", t("log.xarm.connected", { device: next.label }));
-      void get().readBattery();
+      if (!isReplMode()) {
+        void get().readBattery();
+      }
     },
 
     async disconnect() {
@@ -320,6 +372,31 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     },
 
     handleIncomingBytes(bytes) {
+      if (isReplMode()) {
+        set((s) => ({ rxCount: s.rxCount + 1 }));
+        replTextBuffer += decoder.decode(bytes, { stream: true });
+        const lines = replTextBuffer.split(/\r?\n/);
+        replTextBuffer = lines.pop() ?? "";
+        for (const rawLine of lines) {
+          const line = rawLine.replace(/^(>>>|\.\.\.)\s*/g, "").trim();
+          if (!line) continue;
+          // Suppress routine echo of LSC commands or imports
+          if (
+            line.startsWith("LSC.") ||
+            line.startsWith("import Hiwonder") ||
+            line.startsWith("from Hiwonder")
+          ) {
+            continue;
+          }
+          if (line.includes("Error") || line.includes("Traceback")) {
+            log("error", line);
+          } else {
+            log("in", line);
+          }
+        }
+        return;
+      }
+
       const frames =
         get().transport === "SERIAL"
           ? (() => {
@@ -373,6 +450,11 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       if (on) {
         if (!get().connected) return;
         set({ teach: true, mirror: false });
+        if (isReplMode()) {
+          void sendReplLine(buildReplStopLine());
+          log("sys", t("log.xarm.teachOn"));
+          return;
+        }
         void send(buildServoOffPacket(busServos().joints.map((j) => j.servoId)));
         log("sys", t("log.xarm.teachOn"));
         teachTimer = setInterval(() => {
@@ -397,20 +479,40 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
 
     async readPositions() {
       if (!get().connected) return;
+      if (isReplMode()) return;
       applyNextPositions = true;
       await send(buildReadPositionsPacket(allServoIds()));
     },
 
     async readBattery() {
-      if (!get().connected) return;
+      if (!get().connected || isReplMode()) return;
       await send(buildBatteryPacket(), { quiet: true });
     },
 
     async servoOff() {
       if (!get().connected) return;
       set({ mirror: false });
+      if (isReplMode()) {
+        await sendReplLine(buildReplStopLine());
+        log("sys", t("log.xarm.servosOff"));
+        return;
+      }
       await send(buildServoOffPacket(allServoIds()));
       log("sys", t("log.xarm.servosOff"));
+    },
+
+    async runActionGroup(groupId, times = 1) {
+      if (!get().connected) return;
+      if (isReplMode()) {
+        await sendReplLine(buildReplRunActionGroupLine(groupId, times));
+      }
+    },
+
+    async stopActionGroup() {
+      if (!get().connected) return;
+      if (isReplMode()) {
+        await sendReplLine(buildReplStopLine());
+      }
     },
   };
 });

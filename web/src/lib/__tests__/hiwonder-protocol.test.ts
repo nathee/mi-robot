@@ -3,7 +3,12 @@ import {
   buildBatteryPacket,
   buildMovePacket,
   buildPoseMovePacket,
+  buildPoseTargets,
   buildReadPositionsPacket,
+  buildReplMoveServosLine,
+  buildReplMoveSingleServoLine,
+  buildReplRunActionGroupLine,
+  buildReplStopLine,
   buildServoOffPacket,
   jointDegToServoPos,
   jointsFromServoPositions,
@@ -96,6 +101,18 @@ describe("Hiwonder xArm bus-servo protocol", () => {
     }
     expect(positions.get(gripper.servoId)).toBe(gripper.closePos);
     expect(jointsFromServoPositions(positions, maps, [0, 0, 0, 0, 0, 0])).toEqual(q);
+  });
+
+  it("formats CoreX MicroPython LSC commands for xArm 2.0", () => {
+    const { joints: maps, gripper } = XARM2_PROFILE.busServos!;
+    const targets = buildPoseTargets([0, 0, 0, 0, 0, 0], maps, { map: gripper, closed: false });
+    expect(buildReplMoveServosLine(targets, 1000)).toBe(
+      "LSC.moveServos(((6,500),(5,500),(4,500),(2,500),(3,500),(1,850)), 1000)"
+    );
+    expect(buildReplMoveServosLine([{ id: 1, pos: 250 }], 300)).toBe("LSC.moveServos(((1,250),), 300)");
+    expect(buildReplMoveSingleServoLine(6, 500, 150)).toBe("LSC.moveServo(6, 150, 500)");
+    expect(buildReplRunActionGroupLine(2, 3)).toBe("LSC.runActionGroup(2, 3)");
+    expect(buildReplStopLine()).toBe("LSC.stopRunning()");
   });
 });
 

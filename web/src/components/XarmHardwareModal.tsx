@@ -7,15 +7,22 @@ import {
   Cable,
   Download,
   Hand,
+  Play,
   Plug,
   PlugZap,
   Power,
   Send,
+  Square,
   Usb,
   X,
 } from "lucide-react";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
-import { XARM_HID_PRODUCT_ID, XARM_HID_VENDOR_ID, XARM_UART_BAUD } from "@/lib/hardware/hiwonderXarm";
+import {
+  XARM_HID_PRODUCT_ID,
+  XARM_HID_VENDOR_ID,
+  XARM_UART_BAUD,
+  type XarmSerialProtocol,
+} from "@/lib/hardware/hiwonderXarm";
 import { useXarmLinkStore } from "@/stores/useXarmLinkStore";
 import { ToggleSwitch, useEscapeKey } from "./ui";
 import { useT } from "@/lib/i18n/useT";
@@ -49,6 +56,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const t = useT();
   const connected = useXarmLinkStore((s) => s.connected);
   const transport = useXarmLinkStore((s) => s.transport);
+  const serialProtocol = useXarmLinkStore((s) => s.serialProtocol);
   const deviceLabel = useXarmLinkStore((s) => s.deviceLabel);
   const baudRate = useXarmLinkStore((s) => s.baudRate);
   const mirror = useXarmLinkStore((s) => s.mirror);
@@ -60,6 +68,8 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const lastError = useXarmLinkStore((s) => s.lastError);
   const link = useXarmLinkStore.getState();
   const [showMap, setShowMap] = useState(false);
+  const [actionGroupId, setActionGroupId] = useState(0);
+  const [actionTimes, setActionTimes] = useState(1);
 
   useEscapeKey(open, onClose);
   if (!open) return null;
@@ -68,6 +78,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const servos = profile.busServos;
   const hasHid = typeof navigator !== "undefined" && "hid" in navigator;
   const hasSerial = typeof navigator !== "undefined" && "serial" in navigator;
+  const isReplMode = transport === "SERIAL" && serialProtocol === "COREX_REPL";
 
   return (
     <div
@@ -145,40 +156,58 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
 
           {!connected ? (
             <div className="space-y-3">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => void link.connectHid()}
-                  disabled={!hasHid}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <PlugZap className="h-4 w-4" />
-                  {t("xarm.connectHid")}
-                </button>
-                <div className="flex gap-1.5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-slate-600 dark:text-slate-300">Board / Protocol</span>
+                  <select
+                    value={serialProtocol}
+                    onChange={(e) => link.setSerialProtocol(e.target.value as XarmSerialProtocol)}
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <option value="COREX_REPL">xArm 2.0 CoreX (MicroPython LSC)</option>
+                    <option value="LSC_BINARY">xArm 1S / LSC Binary (0x55 0x55)</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-slate-600 dark:text-slate-300">{t("hw.baud")}</span>
                   <select
                     aria-label={t("hw.baud")}
                     title={t("hw.baud")}
                     value={baudRate}
                     onChange={(e) => link.setBaudRate(Number(e.target.value))}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-2 font-mono text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                   >
                     {BAUD_RATES.map((b) => (
                       <option key={b} value={b}>
-                        {b === XARM_UART_BAUD ? `${b} (xArm)` : b}
+                        {b === XARM_UART_BAUD
+                          ? `${b} (xArm 2.0 CoreX)`
+                          : b === 9600
+                            ? `${b} (LSC UART)`
+                            : b}
                       </option>
                     ))}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => void link.connectSerial()}
-                    disabled={!hasSerial}
-                    className={`${BTN} flex-1`}
-                  >
-                    <Cable className="h-4 w-4" />
-                    {t("xarm.connectSerial", { baud: baudRate })}
-                  </button>
-                </div>
+                </label>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void link.connectSerial()}
+                  disabled={!hasSerial}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Cable className="h-4 w-4" />
+                  {t("xarm.connectSerial", { baud: baudRate })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void link.connectHid()}
+                  disabled={!hasHid}
+                  className={BTN}
+                >
+                  <PlugZap className="h-4 w-4" />
+                  {t("xarm.connectHid")}
+                </button>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                 {t("xarm.plugA")}<strong>USB (HID)</strong>{t("xarm.plugB")}{" "}
@@ -213,15 +242,68 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                 </div>
               </Row>
 
-              <Row
-                title={t("xarm.teach")}
-                hint={t("xarm.teachHint")}
-              >
-                <ToggleSwitch checked={teach} onChange={(v) => link.setTeach(v)} aria-label={t("xarm.teach")} />
-              </Row>
+              {!isReplMode && (
+                <Row
+                  title={t("xarm.teach")}
+                  hint={t("xarm.teachHint")}
+                >
+                  <ToggleSwitch checked={teach} onChange={(v) => link.setTeach(v)} aria-label={t("xarm.teach")} />
+                </Row>
+              )}
+
+              {isReplMode && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-900/70">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">Action Group</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={255}
+                      value={actionGroupId}
+                      onChange={(e) => setActionGroupId(Number(e.target.value))}
+                      title="Action Group ID (0-255)"
+                      className="h-7 w-14 rounded-md border border-slate-200 bg-white px-2 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <span className="text-[11px] text-slate-500">×</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={actionTimes}
+                      onChange={(e) => setActionTimes(Number(e.target.value))}
+                      title="Repeat times (0 = loop)"
+                      className="h-7 w-14 rounded-md border border-slate-200 bg-white px-2 text-center font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => void link.runActionGroup(actionGroupId, actionTimes)}
+                    >
+                      <Play className="h-3.5 w-3.5 text-emerald-500" />
+                      Run
+                    </button>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => void link.stopActionGroup()}
+                    >
+                      <Square className="h-3.5 w-3.5 text-rose-500" />
+                      Stop
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
-                <button type="button" className={BTN} onClick={() => void link.readPositions()} title="Read every servo and move the simulator there">
+                <button
+                  type="button"
+                  className={BTN}
+                  disabled={isReplMode}
+                  onClick={() => void link.readPositions()}
+                  title={isReplMode ? "Not supported in CoreX REPL mode" : "Read every servo and move the simulator there"}
+                >
                   <Download className="h-3.5 w-3.5" />
                   {t("xarm.readPositions")}
                 </button>
@@ -229,7 +311,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                   <Send className="h-3.5 w-3.5" />
                   {t("xarm.sendPose")}
                 </button>
-                <button type="button" className={BTN} onClick={() => void link.servoOff()} title="Release torque on all servos">
+                <button type="button" className={BTN} onClick={() => void link.servoOff()} title="Stop running action / Release torque">
                   <Hand className="h-3.5 w-3.5" />
                   {t("xarm.servosOff")}
                 </button>

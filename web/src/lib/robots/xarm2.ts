@@ -104,15 +104,16 @@ export const XARM2_PROFILE: RobotProfile = {
   defaultTool: "XARM_GRIPPER",
   hardwareDriver: "HIWONDER_BUS_SERVO",
   busServos: {
-    // xArm convention: ID 6 = base ... ID 2 = wrist roll, ID 1 = gripper.
+    // xArm 2.0 convention: ID 6 = base, ID 5 = shoulder, ID 4 = elbow,
+    // ID 3 = wrist roll, ID 2 = wrist pitch, ID 1 = gripper.
     joints: [
-      { jointIndex: 0, servoId: 6, direction: 1, offsetDeg: 0 },
-      { jointIndex: 1, servoId: 5, direction: 1, offsetDeg: 0 },
-      { jointIndex: 2, servoId: 4, direction: 1, offsetDeg: 0 },
-      { jointIndex: 3, servoId: 3, direction: 1, offsetDeg: 0 },
-      { jointIndex: 4, servoId: 2, direction: 1, offsetDeg: 0 },
+      { jointIndex: 0, servoId: 6, direction: 1, offsetDeg: 0 }, // J1 Base
+      { jointIndex: 1, servoId: 5, direction: 1, offsetDeg: 0 }, // J2 Shoulder
+      { jointIndex: 2, servoId: 4, direction: 1, offsetDeg: 0 }, // J3 Elbow
+      { jointIndex: 3, servoId: 2, direction: 1, offsetDeg: 0 }, // J4 Wrist Pitch
+      { jointIndex: 4, servoId: 3, direction: 1, offsetDeg: 0 }, // J5 Wrist Roll
     ],
-    gripper: { servoId: 1, openPos: 300, closePos: 700 },
+    gripper: { servoId: 1, openPos: 850, closePos: 250 },
   },
   // The arm is short (L2 + L3 = 196 mm) and the gripper-down wrist sits 150 mm above the TCP, so
   // a top-down grasp only reaches ~155 mm out at tray height. The Mirobot layout (tray at

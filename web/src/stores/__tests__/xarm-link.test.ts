@@ -129,10 +129,34 @@ describe("xArm link store", () => {
     expect(parseReply(buildMovePacket([{ id: 1, pos: 1 }], 1))?.kind).toBe("OTHER");
   });
 
-  it("allows changing the serial baud rate", () => {
-    expect(useXarmLinkStore.getState().baudRate).toBe(9600);
-    useXarmLinkStore.getState().setBaudRate(115200);
+  it("allows changing the serial baud rate and supports CoreX REPL mode", async () => {
     expect(useXarmLinkStore.getState().baudRate).toBe(115200);
-    useXarmLinkStore.getState().setBaudRate(9600);
+    expect(useXarmLinkStore.getState().serialProtocol).toBe("COREX_REPL");
+
+    const sentText: string[] = [];
+    const decoder = new TextDecoder();
+    const serialTransport: XarmTransport = {
+      kind: "SERIAL",
+      label: "CoreX REPL @ 115200",
+      send: async (frame) => {
+        sentText.push(decoder.decode(frame));
+      },
+      close: async () => undefined,
+    };
+
+    const link = useXarmLinkStore.getState();
+    link.attachTransport(serialTransport);
+    await link.sendCurrentPose(800);
+    expect(sentText[0]).toBe("LSC.moveServos(((6,500),(5,500),(4,500),(2,500),(3,500),(1,850)), 800)\r\n");
+
+    await link.runActionGroup(3, 2);
+    expect(sentText[1]).toBe("LSC.runActionGroup(3, 2)\r\n");
+
+    await link.servoOff();
+    expect(sentText[2]).toBe("LSC.stopRunning()\r\n");
+
+    link.setBaudRate(9600);
+    expect(useXarmLinkStore.getState().baudRate).toBe(9600);
+    link.setBaudRate(115200);
   });
 });
