@@ -70,6 +70,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const [showMap, setShowMap] = useState(false);
   const [actionGroupId, setActionGroupId] = useState(0);
   const [actionTimes, setActionTimes] = useState(1);
+  const [rawReplCmd, setRawReplCmd] = useState("LSC.moveServo(1, 300, 500)");
 
   useEscapeKey(open, onClose);
   if (!open) return null;
@@ -291,6 +292,62 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                     >
                       <Square className="h-3.5 w-3.5 text-rose-500" />
                       Stop
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {isReplMode && (
+                <div className="space-y-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={rawReplCmd}
+                      onChange={(e) => setRawReplCmd(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && rawReplCmd.trim()) {
+                          void link.sendRawRepl(rawReplCmd);
+                        }
+                      }}
+                      placeholder="LSC.moveServo(1, 300, 500)"
+                      className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2.5 font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => void link.sendRawRepl(rawReplCmd)}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      REPL
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => {
+                        void link.sendRawRepl("import Hiwonder; from Hiwonder import LSC; print('REPL_OK')");
+                      }}
+                    >
+                      Test REPL
+                    </button>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => {
+                        void link.sendRawRepl("LSC.moveServo(1, 400, 300)");
+                      }}
+                    >
+                      Close Gripper (ID 1)
+                    </button>
+                    <button
+                      type="button"
+                      className={BTN}
+                      onClick={() => {
+                        void link.sendRawRepl("LSC.moveServo(1, 400, 800)");
+                      }}
+                    >
+                      Open Gripper (ID 1)
                     </button>
                   </div>
                 </div>

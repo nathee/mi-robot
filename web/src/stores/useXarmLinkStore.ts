@@ -89,6 +89,7 @@ interface XarmLinkState {
   servoOff: () => Promise<void>;
   runActionGroup: (groupId: number, times?: number) => Promise<void>;
   stopActionGroup: () => Promise<void>;
+  sendRawRepl: (cmd: string) => Promise<void>;
 }
 
 const MIRROR_INTERVAL_MS = 50;
@@ -277,6 +278,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
             requestPort: () => Promise<{
               open: (o: { baudRate: number }) => Promise<void>;
               close: () => Promise<void>;
+              setSignals?: (signals: { dataTerminalReady?: boolean; requestToSend?: boolean }) => Promise<void>;
               readable: ReadableStream<Uint8Array> | null;
               writable: WritableStream<Uint8Array> | null;
             }>;
@@ -294,21 +296,11 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         const proto = get().serialProtocol;
         const port = await serial.requestPort();
         await port.open({ baudRate: baud });
+        // Ensure ESP32 DTR/RTS auto-reset circuit does not hold EN low (reset state)
+        await port.setSignals?.({ dataTerminalReady: false, requestToSend: false }).catch(() => undefined);
         const writer = port.writable?.getWriter() ?? null;
         const reader = port.readable?.getReader() ?? null;
         let open = true;
-
-        if (proto === "COREX_REPL" && writer) {
-          await sleep(100);
-          await writer.write(encoder.encode("\x03\r\n"));
-          await sleep(80);
-          await writer.write(encoder.encode("\x03\r\n"));
-          await sleep(80);
-          await writer.write(encoder.encode("import Hiwonder\r\n"));
-          await sleep(100);
-          await writer.write(encoder.encode("from Hiwonder import LSC\r\n"));
-          await sleep(150);
-        }
 
         get().attachTransport({
           kind: "SERIAL",
@@ -332,6 +324,30 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
             if (value) get().handleIncomingBytes(value);
           }
         })();
+
+        if (proto === "COREX_REPL" && writer) {
+          const sendInitSeq = async () => {
+            await send(encoder.encode("\x03\r\n"), { quiet: true });
+            await sleep(80);
+            await send(encoder.encode("\x03\r\n"), { quiet: true });
+            await sleep(80);
+            await sendReplLine("import Hiwonder");
+            await sleep(100);
+            await sendReplLine("from Hiwonder import LSC");
+            await sleep(120);
+          };
+          // Attempt 1: immediate (if board did not reset)
+          await sleep(150);
+          await sendInitSeq();
+          await get().sendCurrentPose(SYNC_MOVE_MS);
+          // Attempt 2: after 1.5s (in case DTR/RTS pulse triggered an ESP32 reboot on port.open)
+          await sleep(1500);
+          if (open && get().connected && get().rxCount < 2) {
+            log("sys", "Re-initializing CoreX REPL after boot...");
+            await sendInitSeq();
+            await get().sendCurrentPose(SYNC_MOVE_MS);
+          }
+        }
       } catch (err) {
         const msg = errorMessage(err, t("log.hw.openFailed"));
         set({ lastError: msg });
@@ -342,11 +358,12 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     attachTransport(next) {
       resetLinkState();
       transport = next;
+      const autoMirror = next.kind === "SERIAL" && get().serialProtocol === "COREX_REPL";
       set({
         connected: true,
         transport: next.kind,
         deviceLabel: next.label,
-        mirror: false,
+        mirror: autoMirror,
         teach: false,
         lastError: "",
         txCount: 0,
@@ -380,14 +397,6 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         for (const rawLine of lines) {
           const line = rawLine.replace(/^(>>>|\.\.\.)\s*/g, "").trim();
           if (!line) continue;
-          // Suppress routine echo of LSC commands or imports
-          if (
-            line.startsWith("LSC.") ||
-            line.startsWith("import Hiwonder") ||
-            line.startsWith("from Hiwonder")
-          ) {
-            continue;
-          }
           if (line.includes("Error") || line.includes("Traceback")) {
             log("error", line);
           } else {
@@ -513,6 +522,11 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       if (isReplMode()) {
         await sendReplLine(buildReplStopLine());
       }
+    },
+
+    async sendRawRepl(cmd) {
+      if (!get().connected) return;
+      await sendReplLine(cmd);
     },
   };
 });
