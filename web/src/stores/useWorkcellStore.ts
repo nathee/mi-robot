@@ -19,11 +19,16 @@ import {
   type Platform,
   buildPreset,
   CONVEYOR_MAX_SPEED_MM_S,
-  conveyorFeedPoint,
   conveyorVelocity,
   DEFAULT_BOX_SIZE,
+  findFreeBeltSpot,
   findGraspTarget,
   graspBox,
+  heldBoxPushers,
+  pushBoxes,
+  settleUnsupported,
+  toolPusher,
+  type Pusher,
   makeBox,
   findHeldCollision,
   findToolCollision,
@@ -89,6 +94,11 @@ function log(text: string, dir: "sys" | "error" = "sys") {
 }
 
 const initial = buildPreset("CONVEYOR");
+/** Boxes pushed in the previous frame, so a continuing push is logged once. */
+let lastPushKey = "";
+let lastPushLogAt = 0;
+/** Pusher positions in the previous frame, to know which way the tool is moving. */
+let lastPusherPos = new Map<string, { x: number; y: number }>();
 
 export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   ...initial,
@@ -114,7 +124,12 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     let y: number;
     if (where === "CONVEYOR") {
       const dir = conveyorVelocity(s.conveyorRuntime) > 0 ? 1 : -1;
-      const p = conveyorFeedPoint(s.conveyor, size, dir);
+      // Never stack a new box on one still waiting at the feed point: use the next free spot.
+      const p = findFreeBeltSpot(s.conveyor, s.boxes, size, dir);
+      if (!p) {
+        log("Conveyor is full at the feed end: move the belt before adding another box", "error");
+        return;
+      }
       x = p.x;
       y = p.y;
     } else {
@@ -295,6 +310,41 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
         log(`${TOOL_DEFS.SUCTION.label}: picked ${res.box.id}`);
       }
     }
+    // Contact: the tool tip and any box it carries shove resting boxes they run into.
+    const pushers: Pusher[] = heldBoxPushers(boxes);
+    const tip = toolPusher(tcp, TOOL_DEFS[robot.toolType]);
+    if (tip) pushers.push(tip);
+    for (const p of pushers) {
+      const prev = lastPusherPos.get(p.id);
+      if (prev) {
+        p.vx = p.cx - prev.x;
+        p.vy = p.cy - prev.y;
+      }
+    }
+    lastPusherPos = new Map(pushers.map((p) => [p.id, { x: p.cx, y: p.cy }]));
+    const push = pushBoxes(boxes, pushers, s.platforms, s.conveyor);
+    if (push.pushed.length) {
+      boxes = push.boxes;
+      changed = true;
+      const key = push.pushed.join(",");
+      const now = Date.now();
+      if (key !== lastPushKey || now - lastPushLogAt > 2000) log(`Pushed ${push.pushed.join(", ")}`);
+      lastPushKey = key;
+      lastPushLogAt = now;
+      for (const e of push.events) {
+        log(e.toppledOff ? `${e.boxId} toppled off ${e.toppledOff} onto ${e.restsOn}` : `${e.boxId} fell onto ${e.restsOn}`);
+      }
+    }
+    // Gravity: boxes left without support (belt moved or box picked from under them) drop.
+    const fall = settleUnsupported(boxes, s.platforms, s.conveyor);
+    if (fall.events.length) {
+      boxes = fall.boxes;
+      changed = true;
+      for (const e of fall.events) {
+        log(e.toppledOff ? `${e.boxId} toppled off ${e.toppledOff} onto ${e.restsOn}` : `${e.boxId} fell onto ${e.restsOn}`);
+      }
+    }
+
     const blocked = isSensorBlocked(s.conveyor, s.sensor, boxes);
     if (blocked !== s.sensorBlocked) {
       set({ sensorBlocked: blocked, sensorCount: s.sensorCount + (blocked ? 1 : 0) });

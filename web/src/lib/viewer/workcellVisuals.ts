@@ -18,6 +18,8 @@ import {
   type LightSensorConfig,
   type Platform,
   type WorkBox,
+  END_STOP_HEIGHT_MM,
+  END_STOP_THICKNESS_MM,
 } from "@/lib/sim/workcell";
 import { disposeObjectTree } from "./stlLoader";
 
@@ -143,11 +145,15 @@ export class WorkcellView {
     conv.add(motor);
     // End-stop plate
     const stop = new Mesh(
-      new BoxGeometry(3 * MM, w * MM, 16 * MM),
+      new BoxGeometry(END_STOP_THICKNESS_MM * MM, w * MM, END_STOP_HEIGHT_MM * MM),
       new MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.5 })
     );
     const { min } = conveyorExtent(c);
-    stop.position.set((min - (c.axis === "x" ? c.x : c.y) - 1.5) * MM, 0, (c.topZ + 8) * MM);
+    stop.position.set(
+      (min - (c.axis === "x" ? c.x : c.y) - END_STOP_THICKNESS_MM / 2) * MM,
+      0,
+      (c.topZ + END_STOP_HEIGHT_MM / 2) * MM
+    );
     conv.add(stop);
 
     // Light sensor: emitter + receiver posts on both sides of the belt with a beam across

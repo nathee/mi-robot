@@ -280,6 +280,8 @@ export function stepConveyor(
   const onBelt = next
     .filter((b) => isOnConveyor(conveyor, b))
     .sort((a, b) => (along(conveyor, b) - along(conveyor, a)) * dir);
+  // Boxes stacked on a belt box ride along with it (decided before anything moves).
+  const riders = new Map(onBelt.map((b) => [b.id, stackAbove(next, b)]));
 
   let moved = false;
   for (const box of onBelt) {
@@ -302,11 +304,60 @@ export function stepConveyor(
     if (dir > 0 ? target < pos : target > pos) target = pos;
     if (target !== pos) {
       moved = true;
-      if (conveyor.axis === "x") box.x = target;
-      else box.y = target;
+      for (const b of [box, ...(riders.get(box.id) ?? [])]) {
+        if (conveyor.axis === "x") b.x += target - pos;
+        else b.y += target - pos;
+      }
     }
   }
   return { runtime, boxes: next, moved };
+}
+
+/** Resting boxes stacked on `base`, directly or through other boxes (bottom-up). */
+function stackAbove(boxes: readonly WorkBox[], base: WorkBox): WorkBox[] {
+  const out: WorkBox[] = [];
+  const level = [base];
+  const sorted = boxes.filter((b) => !b.held && b !== base).sort((a, b) => a.z - b.z);
+  for (const b of sorted) {
+    const bottom = b.z - b.size / 2;
+    const on = level.some(
+      (o) =>
+        Math.abs(o.z + o.size / 2 - bottom) < 1 &&
+        overlapLen(b.x, b.size / 2, o.x, o.size / 2) > CONTACT_EPS_MM &&
+        overlapLen(b.y, b.size / 2, o.y, o.size / 2) > CONTACT_EPS_MM
+    );
+    if (on) {
+      out.push(b);
+      level.push(b);
+    }
+  }
+  return out;
+}
+
+/**
+ * Free place for a new box on the belt: the feed point, or the nearest spot downstream of it
+ * that no box occupies. Null when the belt is full there (never stacks a box on another).
+ */
+export function findFreeBeltSpot(
+  c: ConveyorConfig,
+  boxes: readonly WorkBox[],
+  size = DEFAULT_BOX_SIZE,
+  direction = -1
+): { x: number; y: number; z: number } | null {
+  const feed = conveyorFeedPoint(c, size, direction);
+  const { min, max } = conveyorExtent(c);
+  const step = direction < 0 ? -1 : 1;
+  for (let a = along(c, feed); a >= min + size / 2 - 1e-6 && a <= max - size / 2 + 1e-6; a += step) {
+    const p = c.axis === "x" ? { x: a, y: feed.y } : { x: feed.x, y: a };
+    const blocked = boxes.some(
+      (b) =>
+        b.z - b.size / 2 < c.topZ + size &&
+        overlapLen(p.x, size / 2, b.x, b.size / 2) > CONTACT_EPS_MM &&
+        overlapLen(p.y, size / 2, b.y, b.size / 2) > CONTACT_EPS_MM
+    );
+    if (!blocked) return { ...p, z: feed.z };
+  }
+  return null;
 }
 
 function tcpMatrix(tcp: TcpPoseMm): Matrix4 {
@@ -417,6 +468,10 @@ export function supportHeightAt(
 // Contact: stacking, toppling and collisions (boxes treated as axis-aligned cubes)
 // ---------------------------------------------------------------------------
 
+/** End-stop plate at the downstream belt end (mm); keep in sync with workcellVisuals. */
+export const END_STOP_THICKNESS_MM = 3;
+export const END_STOP_HEIGHT_MM = 16;
+
 /** Footprints must overlap by more than this (mm) on both axes to touch / support. */
 const CONTACT_EPS_MM = 0.5;
 /** Interpenetration (mm) tolerated before a held box counts as colliding. */
@@ -465,6 +520,15 @@ function solidSurfaces(ctx: ContactCtx, ignoreId?: string): SupportSurface[] {
       ? { id: "conveyor", label: "Conveyor", top: c.topZ, bottom: 0, cx: mid, cy: cross, hx: halfLen, hy: c.widthMm / 2 }
       : { id: "conveyor", label: "Conveyor", top: c.topZ, bottom: 0, cx: cross, cy: mid, hx: c.widthMm / 2, hy: halfLen }
   );
+  // End-stop plate just past the downstream end (matches the viewer: 3 mm thick, 16 mm tall).
+  const stopA = min - END_STOP_THICKNESS_MM / 2;
+  const stopTop = c.topZ + END_STOP_HEIGHT_MM;
+  const stopHalfT = END_STOP_THICKNESS_MM / 2;
+  out.push(
+    c.axis === "x"
+      ? { id: "end-stop", label: "End stop", top: stopTop, bottom: 0, cx: stopA, cy: cross, hx: stopHalfT, hy: c.widthMm / 2 }
+      : { id: "end-stop", label: "End stop", top: stopTop, bottom: 0, cx: cross, cy: stopA, hx: c.widthMm / 2, hy: stopHalfT }
+  );
   for (const b of ctx.boxes) {
     if (b.held || b.id === ignoreId) continue;
     out.push({ id: b.id, label: b.id, top: b.z + b.size / 2, bottom: b.z - b.size / 2, cx: b.x, cy: b.y, hx: b.size / 2, hy: b.size / 2 });
@@ -492,14 +556,22 @@ export interface LandingEvent {
  */
 export function landBox(box: WorkBox, ctx: ContactCtx, depth = 0): { box: WorkBox; event: LandingEvent } {
   const half = box.size / 2;
-  const top = box.z + half;
-  const surfaces = solidSurfaces(ctx, box.id).filter(
+  const under = solidSurfaces(ctx, box.id).filter(
     (s) =>
-      s.top <= top - 1 &&
       overlapLen(box.x, half, s.cx, s.hx) > CONTACT_EPS_MM &&
       overlapLen(box.y, half, s.cy, s.hy) > CONTACT_EPS_MM
   );
-  const height = surfaces.reduce((m, s) => Math.max(m, s.top), 0);
+  // Every solid that starts below the box's top is under it or inside it. A box can't share
+  // space with another, so it rests on the highest of them: released inside a stack, it ends
+  // on top of the stack. Raising it can reach boxes stacked higher, so repeat until it settles.
+  let top = box.z + half;
+  let surfaces = under.filter((s) => s.bottom < top - 1);
+  let height = surfaces.reduce((m, s) => Math.max(m, s.top), 0);
+  while (height + box.size > top + 1e-6) {
+    top = height + box.size;
+    surfaces = under.filter((s) => s.bottom < top - 1);
+    height = surfaces.reduce((m, s) => Math.max(m, s.top), 0);
+  }
   const resting = surfaces.filter((s) => Math.abs(s.top - height) < 0.5);
   const q = new Quaternion(box.q[0], box.q[1], box.q[2], box.q[3]);
   const settled = (b: WorkBox, quat: Quaternion, restsOn: string) => ({
@@ -570,6 +642,198 @@ export function releaseBoxes(
   conveyor: ConveyorConfig
 ): WorkBox[] {
   return releaseBoxesDetailed(boxes, platforms, conveyor).boxes;
+}
+
+/**
+ * Gravity for resting boxes: any box with nothing under it (its support was carried away by the
+ * belt, picked up, or pushed off) drops onto whatever is below, toppling over an edge when it
+ * hangs off. Boxes listed in `recheck` (e.g. just pushed) also topple when their centre of mass
+ * no longer sits over the surface they rest on. Bottom-up, so whole stacks come down together.
+ */
+export function settleUnsupported(
+  boxes: readonly WorkBox[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig,
+  recheck: ReadonlySet<string> = new Set()
+): { boxes: WorkBox[]; events: LandingEvent[] } {
+  let next = boxes.slice();
+  const events: LandingEvent[] = [];
+  const order = next.filter((b) => !b.held).sort((a, b) => a.z - b.z).map((b) => b.id);
+  for (const id of order) {
+    const b = next.find((o) => o.id === id)!;
+    const half = b.size / 2;
+    const bottom = b.z - half;
+    const others = next.filter((o) => o.id !== id);
+    const ctx = { boxes: others, platforms, conveyor };
+    const under = solidSurfaces(ctx, id).filter(
+      (s) =>
+        s.top <= bottom + 1 &&
+        overlapLen(b.x, half, s.cx, s.hx) > CONTACT_EPS_MM &&
+        overlapLen(b.y, half, s.cy, s.hy) > CONTACT_EPS_MM
+    );
+    const height = under.reduce((m, s) => Math.max(m, s.top), 0);
+    let fall = bottom - height > 0.5;
+    if (!fall && recheck.has(id)) {
+      const resting = under.filter((s) => Math.abs(s.top - height) < 0.5);
+      fall =
+        resting.length > 0 &&
+        !resting.some((s) => Math.abs(b.x - s.cx) <= s.hx + 1e-6 && Math.abs(b.y - s.cy) <= s.hy + 1e-6);
+    }
+    if (!fall) continue;
+    // landBox drops from the current height; start just above the support to avoid
+    // being lifted onto anything the box merely overlaps sideways.
+    const res = landBox({ ...b, z: Math.max(height, 0) + half + 0.01 }, ctx);
+    if (Math.abs(res.box.z - b.z) < 1e-6 && res.box.x === b.x && res.box.y === b.y) continue;
+    next = next.map((o) => (o.id === id ? res.box : o));
+    events.push(res.event);
+  }
+  return { boxes: next, events };
+}
+
+/** Axis-aligned solid that can push resting boxes (a held box or the tool tip). */
+export interface Pusher {
+  id: string;
+  cx: number;
+  cy: number;
+  hx: number;
+  hy: number;
+  bottom: number;
+  top: number;
+  /** Tool tip: never pushes a box whose footprint contains the TCP (that's pressing/gripping it). */
+  isTool?: boolean;
+  /** Horizontal motion since the previous frame (mm). Boxes are pushed the way the pusher moves. */
+  vx?: number;
+  vy?: number;
+}
+
+export function heldBoxPushers(boxes: readonly WorkBox[]): Pusher[] {
+  return boxes
+    .filter((b) => b.held)
+    .map((b) => ({ id: b.id, cx: b.x, cy: b.y, hx: b.size / 2, hy: b.size / 2, bottom: b.z - b.size / 2, top: b.z + b.size / 2 }));
+}
+
+/** Tool tip as a small column from the TCP up the tool body. Null for the bare flange. */
+export function toolPusher(tcp: TcpPoseMm, tool: ToolDef): Pusher | null {
+  const half = tool.type === "SUCTION" || tool.type === "NONE" ? 4 : 2;
+  return {
+    id: "__tool__",
+    cx: tcp.x,
+    cy: tcp.y,
+    hx: half,
+    hy: half,
+    bottom: tcp.z,
+    top: tcp.z + Math.max(20, tool.tcpOffsetMm),
+    isTool: true,
+  };
+}
+
+/**
+ * Real-world contact instead of interpenetration: when the tool or a box it carries moves into a
+ * resting box from the side, that box is shoved out of the way (along the shallowest overlap),
+ * carrying boxes stacked on it and shoving the boxes it runs into in turn. A box can't be pushed
+ * into the tray or conveyor body; pressing down on top of a box never pushes it (that stays a
+ * collision). Pushed boxes then fall or topple if they lost their support.
+ */
+export function pushBoxes(
+  boxes: readonly WorkBox[],
+  pushers: readonly Pusher[],
+  platforms: readonly Platform[],
+  conveyor: ConveyorConfig
+): { boxes: WorkBox[]; pushed: string[]; events: LandingEvent[] } {
+  let next = boxes.map((b) => ({ ...b }));
+  const pushed = new Set<string>();
+  const statics = solidSurfaces({ boxes: [], platforms, conveyor });
+  const active: Pusher[] = [...pushers];
+  for (let iter = 0; iter < 12; iter++) {
+    let moved = false;
+    for (const p of [...active]) {
+      for (const b of next) {
+        if (b.held || b.id === p.id) continue;
+        const h = b.size / 2;
+        const ox = overlapLen(p.cx, p.hx, b.x, h);
+        const oy = overlapLen(p.cy, p.hy, b.y, h);
+        const oz = Math.min(p.top, b.z + h) - Math.max(p.bottom, b.z - h);
+        if (ox <= 0.05 || oy <= 0.05 || oz <= 0.05) continue;
+        if (p.isTool && Math.abs(p.cx - b.x) <= h && Math.abs(p.cy - b.y) <= h) {
+          // TCP over the box: gripping or pressing it, unless it just came in through a side face.
+          const px = p.cx - (p.vx ?? 0);
+          const py = p.cy - (p.vy ?? 0);
+          if (Math.abs(px - b.x) <= h && Math.abs(py - b.y) <= h) continue;
+        }
+        if (oz <= Math.min(ox, oy)) continue; // contact from above/below: not a sideways push
+        const vx = p.vx ?? 0;
+        const vy = p.vy ?? 0;
+        // Which face did the pusher come in through? Compare with its position last frame:
+        // the axis on which it wasn't overlapping before is the one it crossed.
+        const wasX = overlapLen(p.cx - vx, p.hx, b.x, h) > 0.05;
+        const wasY = overlapLen(p.cy - vy, p.hy, b.y, h) > 0.05;
+        let alongX: boolean;
+        let sign: number;
+        if (wasX !== wasY) {
+          // Crossed exactly one face: shove the box ahead of the pusher on that axis.
+          alongX = !wasX;
+          sign = Math.sign(alongX ? vx : vy) || (alongX ? Math.sign(b.x - p.cx) : Math.sign(b.y - p.cy)) || 1;
+        } else {
+          // Already touching (or entered diagonally / from above): separate along the shallowest overlap.
+          alongX = ox <= oy;
+          sign = (alongX ? Math.sign(b.x - p.cx) : Math.sign(b.y - p.cy)) || 1;
+        }
+        const d = alongX
+          ? p.cx + sign * (p.hx + h + 0.05) - b.x
+          : p.cy + sign * (p.hy + h + 0.05) - b.y;
+        if (d * sign <= 0) continue; // already clear on that side
+        const dx = alongX ? d : 0;
+        const dy = alongX ? 0 : d;
+        const group = [b, ...stackAbove(next, b)];
+        const hitsStatic = group.some((g) =>
+          statics.some(
+            (s) =>
+              s.top > g.z - g.size / 2 + 1 &&
+              overlapLen(g.x + dx, g.size / 2, s.cx, s.hx) > CONTACT_EPS_MM &&
+              overlapLen(g.y + dy, g.size / 2, s.cy, s.hy) > CONTACT_EPS_MM
+          )
+        );
+        if (hitsStatic) continue; // jammed: stays a collision
+        const ids = new Set(group.map((g) => g.id));
+        next = next.map((o) => (ids.has(o.id) ? { ...o, x: o.x + dx, y: o.y + dy } : o));
+        for (const g of next) {
+          if (!ids.has(g.id)) continue;
+          pushed.add(g.id);
+          const gh = g.size / 2;
+          const entry: Pusher = { id: g.id, cx: g.x, cy: g.y, hx: gh, hy: gh, bottom: g.z - gh, top: g.z + gh, vx: dx, vy: dy };
+          const i = active.findIndex((a) => a.id === g.id);
+          if (i >= 0) active[i] = entry;
+          else active.push(entry);
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  if (pushed.size === 0) return { boxes: next, pushed: [], events: [] };
+  const settled = settleUnsupported(next, platforms, conveyor, pushed);
+  // A box that toppled or fell back into the tool / carried box would be shoved again next
+  // frame, forever. Give up on this push instead: the contact stays a plain collision.
+  const before = new Map(boxes.map((b) => [b.id, b]));
+  const movedNow = (b: WorkBox) => {
+    const o = before.get(b.id);
+    return !o || o.x !== b.x || o.y !== b.y || o.z !== b.z;
+  };
+  const backInside = settled.boxes.some(
+    (b) =>
+      !b.held &&
+      movedNow(b) &&
+      pushers.some((p) => {
+        const h = b.size / 2;
+        return (
+          overlapLen(p.cx, p.hx, b.x, h) > 0.5 &&
+          overlapLen(p.cy, p.hy, b.y, h) > 0.5 &&
+          Math.min(p.top, b.z + h) - Math.max(p.bottom, b.z - h) > 0.5
+        );
+      })
+  );
+  if (backInside) return { boxes: boxes.map((b) => ({ ...b })), pushed: [], events: [] };
+  return { boxes: settled.boxes, pushed: [...pushed], events: settled.events };
 }
 
 /**
