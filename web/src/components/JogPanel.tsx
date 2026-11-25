@@ -4,15 +4,38 @@ import { useRef } from "react";
 import { AlertTriangle, Crosshair, Minus, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { JOINT_LABELS, JOINT_LIMITS, getActiveRobotProfile, type Pose6D } from "@/lib/kinematics/constants";
 
-/** "J2 (Shoulder)" -> "Shoulder" */
-function jointShortName(i: number): string {
-  return /\((.*)\)/.exec(JOINT_LABELS[i] ?? "")?.[1] ?? `Joint ${i + 1}`;
+/** "J2 (Shoulder)" -> "Shoulder" (translated when a key exists) */
+function jointShortName(i: number, t: TFn): string {
+  const name = /\((.*)\)/.exec(JOINT_LABELS[i] ?? "")?.[1];
+  if (!name) return t("jog.jointN", { n: i + 1 });
+  const key = JOINT_NAME_KEYS[name];
+  return key ? t(key) : name;
 }
+
+const JOINT_NAME_KEYS: Record<string, MessageKey> = {
+  Base: "joint.base",
+  Shoulder: "joint.shoulder",
+  Elbow: "joint.elbow",
+  "Wrist Pitch": "joint.wristPitch",
+  "Wrist Roll": "joint.wristRoll",
+  Tool: "joint.tool",
+};
+
+const PRESET_KEYS: Record<string, MessageKey> = {
+  Home: "preset.home",
+  Ready: "preset.ready",
+  Reach: "preset.reach",
+  Pick: "preset.pick",
+};
 import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 import { NumericInput } from "./ui";
+import type { MessageKey } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/useT";
+
+type TFn = ReturnType<typeof useT>;
 
 
 const POSITION_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; step: number; badge: string }> = [
@@ -28,6 +51,7 @@ const ORIENTATION_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; 
 ];
 
 export function JogPanel() {
+  const t = useT();
   const { activeJointCount, jogPresets } = getActiveRobotProfile();
   const joints = useRobotStore((s) => s.joints);
   const ikTarget = useRobotStore((s) => s.ikTarget);
@@ -49,6 +73,7 @@ export function JogPanel() {
 
   // Track starting joint value when dragging a slider so release logs accurately
   const sliderStartRef = useRef<Record<number, number>>({});
+  const presetLabel = (label: string) => (PRESET_KEYS[label] ? t(PRESET_KEYS[label]) : label);
 
   const axisRange = (key: keyof Pose6D): { min: number; max: number } => {
     if (key === "x") return { min: workspace.xMin, max: workspace.xMax };
@@ -69,7 +94,7 @@ export function JogPanel() {
   const applyPreset = (label: string, presetJoints: number[]) => {
     cancelPath();
     setJoints(presetJoints, { syncIk: true });
-    appendLog({ dir: "sys", text: `Moved to preset pose: ${label}` });
+    appendLog({ dir: "sys", text: t("log.presetMoved", { label }) });
   };
 
   const renderLinearCard = (axis: (typeof POSITION_AXES)[number]) => {
@@ -92,7 +117,7 @@ export function JogPanel() {
               type="button"
               onClick={() => handleLinearChange(axis.key, val - axis.step, true)}
               title={`${axis.label} -${axis.step}${axis.unit}`}
-              aria-label={`Decrease ${axis.label}`}
+              aria-label={t("jog.decrease", { axis: axis.label })}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
             >
               <Minus className="h-3.5 w-3.5" />
@@ -112,7 +137,7 @@ export function JogPanel() {
               type="button"
               onClick={() => handleLinearChange(axis.key, val + axis.step, true)}
               title={`${axis.label} +${axis.step}${axis.unit}`}
-              aria-label={`Increase ${axis.label}`}
+              aria-label={t("jog.increase", { axis: axis.label })}
               className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -121,7 +146,7 @@ export function JogPanel() {
         </div>
         <input
           type="range"
-          aria-label={`${axis.label} slider`}
+          aria-label={t("jog.slider", { axis: axis.label })}
           min={range.min}
           max={range.max}
           step={1}
@@ -157,7 +182,7 @@ export function JogPanel() {
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Joints (J1–J{activeJointCount})
+          {t("jog.jointsMode", { n: activeJointCount })}
         </button>
         <button
           type="button"
@@ -168,7 +193,7 @@ export function JogPanel() {
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Position (XYZ)
+          {t("jog.positionMode")}
         </button>
       </div>
 
@@ -176,17 +201,17 @@ export function JogPanel() {
       <section className="space-y-2">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           <Sparkles className="h-3.5 w-3.5 text-sky-500" />
-          <span>Quick Poses</span>
+          <span>{t("jog.quickPoses")}</span>
         </div>
         <div className="grid grid-cols-4 gap-2">
           {jogPresets.map((preset) => (
             <button
               key={preset.label}
               type="button"
-              onClick={() => applyPreset(preset.label, preset.joints.slice())}
+              onClick={() => applyPreset(presetLabel(preset.label), preset.joints.slice())}
               className="rounded-xl border border-slate-200/80 bg-white py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-800 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
             >
-              {preset.label}
+              {presetLabel(preset.label)}
             </button>
           ))}
         </div>
@@ -204,9 +229,9 @@ export function JogPanel() {
       {poseMode === "JOINT" ? (
         <section className="space-y-2">
           <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            <span>Joint Angles (°)</span>
+            <span>{t("jog.jointAngles")}</span>
             <span className="font-normal normal-case tracking-normal text-slate-400">
-              Click J1–J{activeJointCount} to zero
+              {t("jog.clickToZero", { n: activeJointCount })}
             </span>
           </div>
           <div className="space-y-2">
@@ -227,14 +252,14 @@ export function JogPanel() {
                           cancelPath();
                           setJoint(i, 0, { log: true });
                         }}
-                        title={isZero ? `J${i + 1} at 0°` : `Click to reset J${i + 1} to 0°`}
+                        title={isZero ? t("jog.atZero", { j: i + 1 }) : t("jog.resetToZero", { j: i + 1 })}
                         className="inline-flex shrink-0 items-center gap-1 rounded-md bg-sky-500/12 px-2 py-0.5 font-mono text-xs font-bold text-sky-600 transition hover:bg-sky-500/20 disabled:cursor-default disabled:bg-slate-100 disabled:text-slate-500 dark:text-sky-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
                       >
                         J{i + 1}
                         {!isZero && <RotateCcw className="h-2.5 w-2.5 opacity-70" />}
                       </button>
                       <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
-                        {jointShortName(i)}
+                        {jointShortName(i, t)}
                       </span>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
@@ -245,13 +270,13 @@ export function JogPanel() {
                           stepJoint(i, -5);
                         }}
                         title={`J${i + 1} -5°`}
-                        aria-label={`Decrease J${i + 1} by 5 degrees`}
+                        aria-label={t("jog.decreaseJ5", { j: i + 1 })}
                         className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </button>
                       <NumericInput
-                        aria-label={`J${i + 1} angle in degrees`}
+                        aria-label={t("jog.jointAngleAria", { j: i + 1 })}
                         value={val}
                         min={limit.min}
                         max={limit.max}
@@ -271,7 +296,7 @@ export function JogPanel() {
                           stepJoint(i, 5);
                         }}
                         title={`J${i + 1} +5°`}
-                        aria-label={`Increase J${i + 1} by 5 degrees`}
+                        aria-label={t("jog.increaseJ5", { j: i + 1 })}
                         className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -280,7 +305,7 @@ export function JogPanel() {
                   </div>
                   <input
                     type="range"
-                    aria-label={`J${i + 1} slider`}
+                    aria-label={t("jog.slider", { axis: `J${i + 1}` })}
                     min={limit.min}
                     max={limit.max}
                     step={0.5}
@@ -298,7 +323,7 @@ export function JogPanel() {
                       if (typeof start === "number" && Math.abs(end - start) > 0.05) {
                         appendLog({
                           dir: "sys",
-                          text: `Jog J${i + 1}: ${start.toFixed(1)}° -> ${end.toFixed(1)}°`,
+                          text: t("log.jog", { j: i + 1, from: start.toFixed(1), to: end.toFixed(1) }),
                         });
                       }
                       delete sliderStartRef.current[i];
@@ -318,9 +343,9 @@ export function JogPanel() {
         <div className="space-y-4">
           <section className="space-y-2">
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              <span>Position (mm)</span>
+              <span>{t("jog.positionMm")}</span>
               <span className="font-normal normal-case tracking-normal text-slate-400">
-                Or drag 3D arrows
+                {t("jog.dragArrows")}
               </span>
             </div>
             <div className="space-y-2">{POSITION_AXES.map(renderLinearCard)}</div>
@@ -328,7 +353,7 @@ export function JogPanel() {
 
           <section className="space-y-2">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Orientation (°)
+              {t("jog.orientation")}
             </div>
             <div className="space-y-2">{ORIENTATION_AXES.map(renderLinearCard)}</div>
           </section>
@@ -344,17 +369,17 @@ export function JogPanel() {
               }`}
             >
               <Crosshair className="h-3.5 w-3.5" />
-              Solve IK
+              {t("jog.solveIk")}
             </button>
             <div className="text-right font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
               <div>
-                Pos err{" "}
+                {t("jog.posErr")}{" "}
                 <strong className="text-slate-800 dark:text-slate-100">
                   {lastIkErr.posMm.toFixed(2)} mm
                 </strong>
               </div>
               <div>
-                Rot err{" "}
+                {t("jog.rotErr")}{" "}
                 <strong className="text-slate-800 dark:text-slate-100">
                   {lastIkErr.rotDeg.toFixed(1)}°
                 </strong>

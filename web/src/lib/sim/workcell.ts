@@ -1,5 +1,6 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from "three";
 import type { ToolDef } from "@/lib/tools/toolDefs";
+import { t } from "@/lib/i18n";
 
 /**
  * Pure (render-free) work-cell simulation: boxes, a tray and a conveyor belt.
@@ -926,6 +927,18 @@ export const WORKCELL_PRESETS: Record<WorkcellPresetId, { label: string; descrip
     description: "Boxes arrive on the conveyor. Pick them up at the end of the belt and place them on the tray.",
   },
 };
+
+/** Localized preset text for display. */
+export function workcellPresetText(id: WorkcellPresetId, field: "label" | "description"): string {
+  return t(`workcell.preset.${id}.${field}`);
+}
+
+/** Platform labels are stored in English ("Tray", "Tray 2"); translate them for display. */
+export function platformDisplayLabel(label: string): string {
+  if (label === "Tray") return t("workcell.tray");
+  const m = /^Tray (\d+)$/.exec(label);
+  return m ? t("workcell.trayN", { n: m[1] }) : label;
+}
 
 export function buildPreset(id: WorkcellPresetId): WorkcellSnapshot {
   const conveyor = { ...DEFAULT_CONVEYOR };

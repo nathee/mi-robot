@@ -36,6 +36,7 @@ import { useCodeStore } from "@/stores/useCodeStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 import { NumericInput } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 interface PathPanelProps {
   onRequestRenameTarget: (index: number, currentName: string) => void;
@@ -54,6 +55,7 @@ export function PathPanel({
   onRequestRenameTarget,
   onRequestClearTargets,
 }: PathPanelProps) {
+  const t = useT();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -93,9 +95,9 @@ export function PathPanel({
 
   const targetRole = (idx: number): string | null => {
     if (settings.motionType !== "MOVEC" || targets.length < 3) return null;
-    if (idx === 0) return "Start";
-    if (idx % 2 === 1) return "Via";
-    return "End";
+    if (idx === 0) return t("path.roleStart");
+    if (idx % 2 === 1) return t("path.roleVia");
+    return t("path.roleEnd");
   };
 
   return (
@@ -105,7 +107,7 @@ export function PathPanel({
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-              Playback
+              {t("path.playback")}
             </span>
             <span
               className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${STATUS_BADGE[status] ?? STATUS_BADGE.IDLE}`}
@@ -115,9 +117,9 @@ export function PathPanel({
           </div>
 
           <label className="inline-flex items-center gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            <span>Repeat</span>
+            <span>{t("path.repeat")}</span>
             <NumericInput
-              aria-label="Repeat count"
+              aria-label={t("path.repeatCount")}
               min={1}
               max={100}
               step={1}
@@ -140,15 +142,15 @@ export function PathPanel({
             }`}
           >
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            <span>{isPlaying ? "Pause" : "Play Path"}</span>
+            <span>{isPlaying ? t("path.pause") : t("path.play")}</span>
           </button>
 
           <button
             type="button"
             disabled={targets.length === 0}
             onClick={stepProgram}
-            title="Step to next waypoint"
-            aria-label="Step to next waypoint"
+            title={t("path.step")}
+            aria-label={t("path.step")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <SkipForward className="h-4 w-4" />
@@ -157,9 +159,9 @@ export function PathPanel({
           <button
             type="button"
             disabled={status === "IDLE"}
-            onClick={() => stopPlayback("Stopped playback")}
-            title="Stop"
-            aria-label="Stop playback"
+            onClick={() => stopPlayback(t("log.stoppedPlayback"))}
+            title={t("path.stop")}
+            aria-label={t("path.stopPlayback")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-35 dark:text-rose-400"
           >
             <Square className="h-4 w-4" />
@@ -169,8 +171,8 @@ export function PathPanel({
             type="button"
             disabled={targets.length === 0}
             onClick={resetPlayback}
-            title="Reset to first waypoint"
-            aria-label="Reset to first waypoint"
+            title={t("path.reset")}
+            aria-label={t("path.reset")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <RotateCcw className="h-4 w-4" />
@@ -216,7 +218,7 @@ export function PathPanel({
 
         {settings.motionType === "MOVEC" && targets.length < 3 && (
           <p className="rounded-xl border border-purple-500/20 bg-purple-500/10 px-3 py-2 text-[11px] text-purple-700 dark:text-purple-300">
-            Circular arc (MoveC) requires at least 3 waypoints: Start → Via → End.
+            {t("path.movecHint")}
           </p>
         )}
 
@@ -225,22 +227,22 @@ export function PathPanel({
             type="button"
             disabled={isLocked}
             onClick={() => teachTarget()}
-            title="Save current robot pose as a waypoint (Ctrl+I)"
+            title={t("path.addTitle")}
             className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-500 disabled:opacity-40"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Current Pose</span>
+            <span>{t("path.add")}</span>
           </button>
 
           <button
             type="button"
             disabled={isLocked || activeTargetIndex < 0}
             onClick={() => updateSelectedTarget()}
-            title="Overwrite selected waypoint with current robot pose"
+            title={t("path.updateTitle")}
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Update</span>
+            <span>{t("path.update")}</span>
           </button>
         </div>
       </div>
@@ -249,7 +251,7 @@ export function PathPanel({
       <section className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Waypoints ({targets.length})
+            {t("path.waypoints", { n: targets.length })}
           </span>
           <div className="flex items-center gap-1">
             <div className="inline-flex items-center rounded-lg border border-slate-200/80 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-900">
@@ -257,8 +259,8 @@ export function PathPanel({
                 type="button"
                 disabled={undoCount === 0 || isLocked}
                 onClick={() => undo()}
-                title="Undo (Ctrl+Z)"
-                aria-label="Undo"
+                title={`${t("common.undo")} (Ctrl+Z)`}
+                aria-label={t("common.undo")}
                 className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 <Undo2 className="h-3.5 w-3.5" />
@@ -267,8 +269,8 @@ export function PathPanel({
                 type="button"
                 disabled={redoCount === 0 || isLocked}
                 onClick={() => redo()}
-                title="Redo (Ctrl+Y)"
-                aria-label="Redo"
+                title={`${t("common.redo")} (Ctrl+Y)`}
+                aria-label={t("common.redo")}
                 className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 <Redo2 className="h-3.5 w-3.5" />
@@ -278,8 +280,8 @@ export function PathPanel({
                 type="button"
                 disabled={activeTargetIndex < 0}
                 onClick={() => copySelectedTarget()}
-                title="Copy selected (Ctrl+C)"
-                aria-label="Copy selected waypoint"
+                title={t("path.copyTitle")}
+                aria-label={t("path.copyAria")}
                 className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 <Copy className="h-3.5 w-3.5" />
@@ -288,8 +290,8 @@ export function PathPanel({
                 type="button"
                 disabled={!hasClipboard || isLocked}
                 onClick={() => pasteTarget()}
-                title="Paste waypoint (Ctrl+V)"
-                aria-label="Paste waypoint"
+                title={t("path.pasteTitle")}
+                aria-label={t("path.pasteAria")}
                 className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
               >
                 <ClipboardPaste className="h-3.5 w-3.5" />
@@ -302,7 +304,7 @@ export function PathPanel({
                 onClick={onRequestClearTargets}
                 className="rounded-lg px-2 py-1 text-[11px] font-medium text-rose-600 transition hover:bg-rose-50 disabled:opacity-35 dark:text-rose-400 dark:hover:bg-rose-950/40"
               >
-                Clear
+                {t("common.clear")}
               </button>
             )}
           </div>
@@ -311,7 +313,7 @@ export function PathPanel({
         {targets.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-5 text-center dark:border-slate-700/80 dark:bg-slate-900/40">
             <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              Pose the robot and click <strong>Add Current Pose</strong>, or try a demo:
+              {t("path.emptyBefore")}<strong>{t("path.add")}</strong>{t("path.emptyAfter")}
             </p>
             <button
               type="button"
@@ -319,7 +321,7 @@ export function PathPanel({
               className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-3.5 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              Load Demo Path
+              {t("path.loadDemo")}
             </button>
           </div>
         ) : (
@@ -382,8 +384,8 @@ export function PathPanel({
                         e.stopPropagation();
                         goToTarget(idx);
                       }}
-                      title={`Move arm to ${target.name}`}
-                      aria-label={`Move arm to ${target.name}`}
+                      title={t("path.moveTo", { name: target.name })}
+                      aria-label={t("path.moveTo", { name: target.name })}
                       className="rounded-lg p-1.5 text-slate-400 transition hover:bg-sky-500/15 hover:text-sky-600 dark:hover:text-sky-400"
                     >
                       <Navigation className="h-3.5 w-3.5" />
@@ -395,8 +397,8 @@ export function PathPanel({
                         e.stopPropagation();
                         onRequestRenameTarget(idx, target.name);
                       }}
-                      title="Rename waypoint"
-                      aria-label={`Rename ${target.name}`}
+                      title={t("path.rename")}
+                      aria-label={t("path.renameAria", { name: target.name })}
                       className={`rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-20 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
                         isSelected
                           ? "opacity-100"
@@ -412,8 +414,8 @@ export function PathPanel({
                         e.stopPropagation();
                         removeTarget(idx);
                       }}
-                      title="Delete waypoint"
-                      aria-label={`Delete ${target.name}`}
+                      title={t("path.delete")}
+                      aria-label={t("path.deleteAria", { name: target.name })}
                       className={`rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 disabled:opacity-20 dark:hover:bg-rose-950/50 ${
                         isSelected
                           ? "opacity-100"
@@ -439,11 +441,11 @@ export function PathPanel({
             generateFromPath();
             setViewerField("sidebarPanel", "CODE");
           }}
-          title="Replace the Code program with Blocks, Script and G-code generated from these waypoints"
+          title={t("path.generateTitle")}
           className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-sky-500/40 bg-sky-500/10 text-xs font-semibold text-sky-700 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
         >
           <Code2 className="h-4 w-4" />
-          <span>Generate Code from Path</span>
+          <span>{t("path.generate")}</span>
         </button>
       )}
 
@@ -456,7 +458,7 @@ export function PathPanel({
         >
           <span className="inline-flex items-center gap-2">
             <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" />
-            Speed &amp; Telemetry
+            {t("path.speedTelemetry")}
           </span>
           {showAdvanced ? (
             <ChevronDown className="h-4 w-4 text-slate-400" />
@@ -470,7 +472,7 @@ export function PathPanel({
             <div className="grid grid-cols-2 gap-2.5">
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  Time Profile
+                  {t("path.timeProfile")}
                 </span>
                 <select
                   disabled={isLocked}
@@ -482,7 +484,7 @@ export function PathPanel({
                 >
                   {TRAJECTORY_PROFILES.map((p) => (
                     <option key={p.value} value={p.value}>
-                      {p.label}
+                      {t(`traj.${p.value}`)}
                     </option>
                   ))}
                 </select>
@@ -490,7 +492,7 @@ export function PathPanel({
 
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  Segment Time
+                  {t("path.segmentTime")}
                 </span>
                 <select
                   disabled={isLocked}
@@ -500,8 +502,8 @@ export function PathPanel({
                   }
                   className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-medium outline-none dark:border-slate-700 dark:bg-slate-950"
                 >
-                  <option value="AUTO">Auto</option>
-                  <option value="FIXED">Fixed</option>
+                  <option value="AUTO">{t("path.auto")}</option>
+                  <option value="FIXED">{t("path.fixed")}</option>
                 </select>
               </label>
             </div>
@@ -514,7 +516,7 @@ export function PathPanel({
               {settings.durationMode === "FIXED" ? (
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Duration (s)
+                    {t("path.duration")}
                   </span>
                   <NumericInput
                     min={0.25}
@@ -531,7 +533,7 @@ export function PathPanel({
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      Joint Speed (°/s)
+                      {t("path.jointSpeed")}
                     </span>
                     <NumericInput
                       min={5}
@@ -546,7 +548,7 @@ export function PathPanel({
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      Joint Acc (°/s²)
+                      {t("path.jointAcc")}
                     </span>
                     <NumericInput
                       min={10}
@@ -566,7 +568,7 @@ export function PathPanel({
                 <>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      TCP Speed (mm/s)
+                      {t("path.tcpSpeed")}
                     </span>
                     <NumericInput
                       min={5}
@@ -581,7 +583,7 @@ export function PathPanel({
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      IK Branch
+                      {t("path.ikBranch")}
                     </span>
                     <select
                       disabled={isLocked}
@@ -593,9 +595,9 @@ export function PathPanel({
                       }
                       className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
                     >
-                      <option value="CLOSEST">Closest</option>
-                      <option value="ELBOW_UP">Elbow +</option>
-                      <option value="ELBOW_DOWN">Elbow -</option>
+                      <option value="CLOSEST">{t("path.closest")}</option>
+                      <option value="ELBOW_UP">{t("path.elbowUp")}</option>
+                      <option value="ELBOW_DOWN">{t("path.elbowDown")}</option>
                     </select>
                   </label>
                 </>
@@ -606,10 +608,10 @@ export function PathPanel({
             <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                  Live Telemetry
+                  {t("path.liveTelemetry")}
                 </span>
                 <select
-                  aria-label="Monitored joint"
+                  aria-label={t("path.monitoredJoint")}
                   value={settings.monitorJoint}
                   onChange={(e) => updateSettings({ monitorJoint: Number(e.target.value) })}
                   className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] dark:border-slate-700 dark:bg-slate-900"
@@ -623,19 +625,19 @@ export function PathPanel({
               </div>
               <div className="grid grid-cols-3 gap-2 font-mono text-[11px] tabular-nums">
                 <div className="rounded-lg bg-white px-2 py-1.5 text-center dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-400">Pos q</div>
+                  <div className="text-[10px] text-slate-400">{t("path.posQ")}</div>
                   <strong className="text-slate-800 dark:text-slate-100">
                     {telemetry.q.toFixed(1)}°
                   </strong>
                 </div>
                 <div className="rounded-lg bg-white px-2 py-1.5 text-center dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-400">Vel v</div>
+                  <div className="text-[10px] text-slate-400">{t("path.velV")}</div>
                   <strong className="text-sky-600 dark:text-sky-400">
                     {telemetry.velocity.toFixed(1)}°/s
                   </strong>
                 </div>
                 <div className="rounded-lg bg-white px-2 py-1.5 text-center dark:bg-slate-900">
-                  <div className="text-[10px] text-slate-400">Acc a</div>
+                  <div className="text-[10px] text-slate-400">{t("path.accA")}</div>
                   <strong className="text-indigo-600 dark:text-indigo-400">
                     {telemetry.acceleration.toFixed(0)}°/s²
                   </strong>

@@ -1,4 +1,12 @@
 import type { GripperState } from "@/lib/program/types";
+import { t } from "@/lib/i18n";
+
+export type ToolTextField = "label" | "shortLabel" | "description" | "grabLabel" | "releaseLabel";
+
+/** Localized tool text for display (TOOL_DEFS keeps the English originals). */
+export function toolText(type: ToolType, field: ToolTextField): string {
+  return t(`tool.${type}.${field}`);
+}
 
 /**
  * End-effectors of the WLKATA Mirobot Advanced Kit.
