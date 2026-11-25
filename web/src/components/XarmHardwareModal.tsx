@@ -66,8 +66,10 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const txCount = useXarmLinkStore((s) => s.txCount);
   const rxCount = useXarmLinkStore((s) => s.rxCount);
   const lastError = useXarmLinkStore((s) => s.lastError);
+  const jointOverrides = useXarmLinkStore((s) => s.jointOverrides);
+  const gripperOverride = useXarmLinkStore((s) => s.gripperOverride);
   const link = useXarmLinkStore.getState();
-  const [showMap, setShowMap] = useState(false);
+  const [showMap, setShowMap] = useState(true);
   const [actionGroupId, setActionGroupId] = useState(0);
   const [actionTimes, setActionTimes] = useState(1);
   const [rawReplCmd, setRawReplCmd] = useState("LSC.moveServo(1, 300, 500)");
@@ -76,7 +78,8 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   if (!open) return null;
 
   const profile = getActiveRobotProfile();
-  const servos = profile.busServos;
+  const servos = profile.busServos ? link.getEffectiveBusServos() : undefined;
+  const hasOverrides = Object.keys(jointOverrides).length > 0 || Object.keys(gripperOverride).length > 0;
   const hasHid = typeof navigator !== "undefined" && "hid" in navigator;
   const hasSerial = typeof navigator !== "undefined" && "serial" in navigator;
   const isReplMode = transport === "SERIAL" && serialProtocol === "COREX_REPL";
@@ -390,14 +393,25 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
 
           {servos && (
             <div>
-              <button
-                type="button"
-                onClick={() => setShowMap((v) => !v)}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-              >
-                <Plug className="h-3.5 w-3.5" />
-                {showMap ? t("xarm.hideMap") : t("xarm.showMap")}
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowMap((v) => !v)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  <Plug className="h-3.5 w-3.5" />
+                  {showMap ? t("xarm.hideMap") : t("xarm.showMap")}
+                </button>
+                {hasOverrides && (
+                  <button
+                    type="button"
+                    onClick={() => link.resetServoCalibration()}
+                    className="text-[11px] font-semibold text-rose-500 hover:underline"
+                  >
+                    Reset to defaults
+                  </button>
+                )}
+              </div>
               {showMap && (
                 <table className="mt-2 w-full overflow-hidden rounded-lg text-left font-mono text-[11px]">
                   <thead className="bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -405,23 +419,102 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                       <th className="px-2.5 py-1.5 font-semibold">{t("viewer.joint")}</th>
                       <th className="px-2.5 py-1.5 font-semibold">Servo ID</th>
                       <th className="px-2.5 py-1.5 font-semibold">{t("xarm.direction")}</th>
-                      <th className="px-2.5 py-1.5 font-semibold">{t("xarm.offset")}</th>
+                      <th className="px-2.5 py-1.5 font-semibold">{t("xarm.offset")} (°)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {servos.joints.map((m) => (
-                      <tr key={m.servoId}>
+                      <tr key={m.jointIndex}>
                         <td className="px-2.5 py-1.5">{profile.jointLabels[m.jointIndex]}</td>
-                        <td className="px-2.5 py-1.5">#{m.servoId}</td>
-                        <td className="px-2.5 py-1.5">{m.direction > 0 ? "+" : "−"}</td>
-                        <td className="px-2.5 py-1.5">{m.offsetDeg}°</td>
+                        <td className="px-2.5 py-1.5">
+                          <select
+                            aria-label={`Servo ID for ${profile.jointLabels[m.jointIndex]}`}
+                            value={m.servoId}
+                            onChange={(e) => link.setJointOverride(m.jointIndex, { servoId: Number(e.target.value) })}
+                            className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] dark:border-slate-700 dark:bg-slate-950"
+                          >
+                            {[1, 2, 3, 4, 5, 6].map((id) => (
+                              <option key={id} value={id}>
+                                #{id}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-2.5 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              link.setJointOverride(m.jointIndex, {
+                                direction: m.direction > 0 ? -1 : 1,
+                              })
+                            }
+                            title="Click to invert rotation direction"
+                            className={`rounded border px-2 py-0.5 font-bold transition ${
+                              m.direction > 0
+                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            }`}
+                          >
+                            {m.direction > 0 ? "+1 (Normal)" : "−1 (Inverted)"}
+                          </button>
+                        </td>
+                        <td className="px-2.5 py-1.5">
+                          <input
+                            type="number"
+                            min={-90}
+                            max={90}
+                            step={1}
+                            value={m.offsetDeg}
+                            onChange={(e) =>
+                              link.setJointOverride(m.jointIndex, { offsetDeg: Number(e.target.value) || 0 })
+                            }
+                            className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center font-mono text-[11px] dark:border-slate-700 dark:bg-slate-950"
+                          />
+                        </td>
                       </tr>
                     ))}
                     <tr>
                       <td className="px-2.5 py-1.5">{t("xarm.gripper")}</td>
                       <td className="px-2.5 py-1.5">#{servos.gripper.servoId}</td>
                       <td className="px-2.5 py-1.5" colSpan={2}>
-                        {t("xarm.gripperPos", { open: servos.gripper.openPos, close: servos.gripper.closePos })}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1">
+                            <span>Open:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={1000}
+                              step={10}
+                              value={servos.gripper.openPos}
+                              onChange={(e) => link.setGripperOverride({ openPos: Number(e.target.value) || 0 })}
+                              className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center font-mono text-[11px] dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </label>
+                          <label className="inline-flex items-center gap-1">
+                            <span>Close:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={1000}
+                              step={10}
+                              value={servos.gripper.closePos}
+                              onChange={(e) => link.setGripperOverride({ closePos: Number(e.target.value) || 0 })}
+                              className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-center font-mono text-[11px] dark:border-slate-700 dark:bg-slate-950"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              link.setGripperOverride({
+                                openPos: servos.gripper.closePos,
+                                closePos: servos.gripper.openPos,
+                              })
+                            }
+                            className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                          >
+                            Swap
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   </tbody>

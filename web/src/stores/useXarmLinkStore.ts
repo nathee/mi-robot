@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
+import type { BusServoGripperMap, BusServoJointMap } from "@/lib/robots/types";
 import {
   XARM_HID_PRODUCT_ID,
   XARM_HID_REPORT_ID,
@@ -53,6 +54,48 @@ export interface XarmTransport {
   close: () => Promise<void>;
 }
 
+export interface ServoCalibrationOverride {
+  servoId?: number;
+  direction?: 1 | -1;
+  offsetDeg?: number;
+}
+
+const SERVO_CAL_STORAGE_KEY = "mirobot:xarm2-servo-calibration";
+
+function loadSavedCalibration(): {
+  jointOverrides: Record<number, ServoCalibrationOverride>;
+  gripperOverride: Partial<BusServoGripperMap>;
+} {
+  try {
+    if (typeof window === "undefined") return { jointOverrides: {}, gripperOverride: {} };
+    const raw = window.localStorage.getItem(SERVO_CAL_STORAGE_KEY);
+    if (!raw) return { jointOverrides: {}, gripperOverride: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      jointOverrides: parsed?.jointOverrides ?? {},
+      gripperOverride: parsed?.gripperOverride ?? {},
+    };
+  } catch {
+    return { jointOverrides: {}, gripperOverride: {} };
+  }
+}
+
+function saveCalibration(
+  jointOverrides: Record<number, ServoCalibrationOverride>,
+  gripperOverride: Partial<BusServoGripperMap>
+) {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        SERVO_CAL_STORAGE_KEY,
+        JSON.stringify({ jointOverrides, gripperOverride })
+      );
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 interface XarmLinkState {
   connected: boolean;
   transport: XarmTransportKind;
@@ -69,9 +112,16 @@ interface XarmLinkState {
   txCount: number;
   rxCount: number;
   lastError: string;
+  /** Per-joint overrides (keyed by jointIndex 0..4) for servoId, direction (+1/-1), offsetDeg. */
+  jointOverrides: Record<number, ServoCalibrationOverride>;
+  gripperOverride: Partial<BusServoGripperMap>;
 
   setBaudRate: (baud: number) => void;
   setSerialProtocol: (protocol: XarmSerialProtocol) => void;
+  setJointOverride: (jointIndex: number, patch: ServoCalibrationOverride) => void;
+  setGripperOverride: (patch: Partial<BusServoGripperMap>) => void;
+  resetServoCalibration: () => void;
+  getEffectiveBusServos: () => { joints: BusServoJointMap[]; gripper: BusServoGripperMap };
   connectHid: () => Promise<void>;
   connectSerial: () => Promise<void>;
   /** Wires an already-open transport (used by connectHid / connectSerial, and by tests). */
@@ -132,6 +182,18 @@ const decoder = new TextDecoder();
 let replTextBuffer = "";
 
 export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
+  const effectiveBusServos = (): { joints: BusServoJointMap[]; gripper: BusServoGripperMap } => {
+    const base = busServos();
+    const { jointOverrides, gripperOverride } = get();
+    return {
+      joints: base.joints.map((j) => {
+        const ov = jointOverrides[j.jointIndex];
+        return ov ? { ...j, ...ov } : j;
+      }),
+      gripper: { ...base.gripper, ...gripperOverride },
+    };
+  };
+
   const send = async (frame: Uint8Array, opts: { quiet?: boolean; logText?: string } = {}) => {
     if (!transport) return;
     try {
@@ -154,7 +216,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
   };
 
   const movePose = (joints: readonly number[], gripperClosed: boolean, durationMs: number, quiet: boolean) => {
-    const { joints: maps, gripper } = busServos();
+    const { joints: maps, gripper } = effectiveBusServos();
     lastSentJoints = joints.slice();
     lastSentGripperClosed = gripperClosed;
     const dur = Math.round(durationMs);
@@ -213,6 +275,8 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     applyNextPositions = false;
   };
 
+  const initialCal = loadSavedCalibration();
+
   return {
     connected: false,
     transport: "NONE",
@@ -226,6 +290,8 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     txCount: 0,
     rxCount: 0,
     lastError: "",
+    jointOverrides: initialCal.jointOverrides,
+    gripperOverride: initialCal.gripperOverride,
 
     setBaudRate(baudRate) {
       set({ baudRate });
@@ -236,6 +302,37 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         serialProtocol,
         baudRate: serialProtocol === "COREX_REPL" ? 115200 : 9600,
       });
+    },
+
+    setJointOverride(jointIndex, patch) {
+      const next = {
+        ...get().jointOverrides,
+        [jointIndex]: { ...get().jointOverrides[jointIndex], ...patch },
+      };
+      set({ jointOverrides: next });
+      saveCalibration(next, get().gripperOverride);
+      lastSentJoints = null;
+      if (get().connected && get().mirror) scheduleMirror();
+    },
+
+    setGripperOverride(patch) {
+      const next = { ...get().gripperOverride, ...patch };
+      set({ gripperOverride: next });
+      saveCalibration(get().jointOverrides, next);
+      lastSentGripperClosed = null;
+      if (get().connected && get().mirror) scheduleMirror();
+    },
+
+    resetServoCalibration() {
+      set({ jointOverrides: {}, gripperOverride: {} });
+      saveCalibration({}, {});
+      lastSentJoints = null;
+      lastSentGripperClosed = null;
+      if (get().connected && get().mirror) scheduleMirror();
+    },
+
+    getEffectiveBusServos() {
+      return effectiveBusServos();
     },
 
     async connectHid() {

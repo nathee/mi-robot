@@ -147,7 +147,7 @@ describe("xArm link store", () => {
     const link = useXarmLinkStore.getState();
     link.attachTransport(serialTransport);
     await link.sendCurrentPose(800);
-    expect(sentText[0]).toBe("LSC.moveServos(((6,500),(5,500),(4,500),(2,500),(3,500),(1,850)), 800)\r\n");
+    expect(sentText[0]).toBe("LSC.moveServos(((6,500),(5,500),(4,500),(2,500),(3,500),(1,250)), 800)\r\n");
 
     await link.runActionGroup(3, 2);
     expect(sentText[1]).toBe("LSC.runActionGroup(3, 2)\r\n");
