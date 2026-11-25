@@ -9,6 +9,7 @@ import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
+import { useLocaleStore } from "@/stores/useLocaleStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { ControlSidebar } from "./ControlSidebar";
@@ -81,6 +82,7 @@ export function SimulatorShell() {
   // Initialize theme, console ready log, and restore previous session from localStorage
   useEffect(() => {
     useThemeStore.getState().init();
+    useLocaleStore.getState().init();
     useSerialStore.getState().initReady();
     useHistoryStore.getState().hydrate();
   }, []);

@@ -1,0 +1,87 @@
+import type { Messages } from "./en";
+
+/** Thai UI strings. Must define every key in `en.ts` with the same `{placeholders}`. */
+export const th: Messages = {
+  "lang.en": "English",
+  "lang.th": "ไทย",
+  "lang.switch": "ภาษา",
+
+  "toolbar.home": "โฮม",
+  "toolbar.homeTitle": "พาหุ่นยนต์กลับตำแหน่งโฮม ({joints})",
+  "toolbar.themeLight": "ธีมสว่าง",
+  "toolbar.themeDark": "ธีมมืด",
+  "toolbar.themeAuto": "ธีมอัตโนมัติ",
+  "toolbar.clickToSwitch": "{label} — คลิกเพื่อสลับ",
+  "toolbar.hidePanel": "ซ่อนแผงควบคุม",
+  "toolbar.showPanel": "แสดงแผงควบคุม",
+
+  // Toolbar
+  "toolbar.switchRobot": "{name} — คลิกเพื่อเปลี่ยนแขนหุ่นยนต์",
+  "toolbar.renameProject": "คลิกเพื่อเปลี่ยนชื่อโปรเจกต์",
+  "toolbar.unsaved": "มีการเปลี่ยนแปลงที่ยังไม่บันทึก — กด Ctrl+S หรือคลิกบันทึก",
+  "toolbar.saved": "บันทึกแล้ว",
+  "toolbar.save": "บันทึก",
+  "toolbar.hwBusTitle": "เชื่อมต่อแขนจริงผ่าน USB",
+  "toolbar.hwRs485Title": "เชื่อมต่อ USB-RS485 หรือ ESP32 Wi-Fi",
+  "toolbar.realArm": "แขนจริง",
+  "toolbar.saveTitle": "บันทึกสแนปช็อตลงประวัติงาน (Ctrl+S)",
+  "toolbar.historyTitle": "ประวัติงาน — ดูและกู้คืนสแนปช็อต",
+  "toolbar.program": "โปรแกรม",
+  "toolbar.newProgram": "โปรแกรมใหม่",
+  "toolbar.open": "เปิด JSON / G-code…",
+  "toolbar.downloadJson": "ดาวน์โหลดโปรเจกต์ (.json)",
+  "toolbar.exportGcode": "ส่งออก WLKATA G-code",
+  "toolbar.sendToRobot": "ส่งไปยังหุ่นยนต์ (USB / ไฟล์)",
+  "toolbar.resetWorkspace": "รีเซ็ตพื้นที่ทำงาน…",
+  "history.exportedGcode": "ส่งออก G-code",
+  "history.savedJson": "บันทึก JSON",
+  "history.opened": "เปิด {file}",
+  "history.manualSave": "บันทึกด้วยตนเอง",
+  "log.exportNothing": "ไม่มีข้อมูลที่ส่งออกเป็น G-code ได้",
+  "log.saved": "บันทึก {file} แล้ว",
+  "log.loadFailed": "โหลดไฟล์ไม่สำเร็จ",
+
+  // StatusBar
+  "status.orbit": "หมุนมุมมอง",
+  "status.pan": "เลื่อน",
+  "status.scroll": "ล้อเมาส์",
+  "status.zoom": "ซูม",
+  "status.vendor": "eleccom.in.th ประเทศไทย",
+
+  // ControlSidebar
+  "sidebar.manual": "สั่งงานเอง",
+  "sidebar.tools": "เครื่องมือ",
+  "sidebar.path": "เส้นทาง",
+  "sidebar.code": "โค้ด",
+  "sidebar.panels": "แผงควบคุม",
+  "common.running": "กำลังทำงาน",
+
+  // TurnstileGate
+  "turnstile.failed": "ยืนยันไม่สำเร็จ กรุณาลองอีกครั้ง",
+  "turnstile.unreachable": "ติดต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง",
+  "turnstile.error": "การตรวจสอบความปลอดภัยผิดพลาด กรุณาลองใหม่",
+  "turnstile.expired": "การตรวจสอบหมดอายุ กรุณายืนยันอีกครั้ง",
+  "turnstile.loadFailed": "โหลดการตรวจสอบความปลอดภัยไม่ได้ ปิดตัวบล็อกสำหรับ challenges.cloudflare.com แล้วลองใหม่",
+  "turnstile.prompt": "ยืนยันว่าคุณเป็นมนุษย์เพื่อเปิดโปรแกรมจำลอง",
+  "turnstile.loading": "กำลังโหลดการตรวจสอบความปลอดภัย…",
+  "turnstile.verifying": "กำลังยืนยัน…",
+  "common.retry": "ลองใหม่",
+
+  // RobotSelectScreen
+  "common.close": "ปิด",
+  "common.cancel": "ยกเลิก",
+  "robot.summary.mirobot": "แขนหุ่นยนต์ตั้งโต๊ะ 6 แกน ขับด้วยสเต็ปเปอร์มอเตอร์ เปลี่ยนหัวเครื่องมือได้",
+  "robot.summary.xarm2": "แขนหุ่นยนต์ 5 แกนแบบบัสเซอร์โว มีกริปเปอร์ในตัว",
+  "robotSelect.switchTitle": "เปลี่ยนแขนหุ่นยนต์",
+  "robotSelect.chooseTitle": "เลือกแขนหุ่นยนต์",
+  "robotSelect.robotArm": "แขนหุ่นยนต์",
+  "robotSelect.axes": "{n} แกน",
+  "robotSelect.axesGripper": "{n} แกน + กริปเปอร์",
+  "robotSelect.reach": "ระยะเอื้อม ~{mm} มม.",
+  "robotSelect.current": "ใช้อยู่",
+  "robotSelect.remember": "ครั้งหน้าเปิดหุ่นยนต์ตัวนี้ทันที",
+  "robotSelect.switching": "กำลังเปลี่ยน…",
+  "robotSelect.switchRobot": "เปลี่ยนหุ่นยนต์",
+  "robotSelect.open": "เปิด {name}",
+  "robotSelect.reloadNote": "โปรแกรมจำลองจะโหลดใหม่สำหรับหุ่นยนต์ตัวใหม่ หุ่นยนต์แต่ละตัวเก็บเซสชันและประวัติงานแยกกัน โปรแกรม {name} ของคุณจึงถูกบันทึกไว้และจะกลับมาเมื่อเปลี่ยนกลับ",
+};

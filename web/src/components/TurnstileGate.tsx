@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { APP_NAME } from "@/lib/appConfig";
+import type { MessageKey } from "@/lib/i18n";
+import { useLocaleStore } from "@/stores/useLocaleStore";
+import { useT } from "@/lib/i18n/useT";
 
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
@@ -57,11 +60,16 @@ export function TurnstileGate({
   siteKey: string;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [verified, setVerified] = useState(false);
   const [status, setStatus] = useState<Status>("loading");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<MessageKey | "">("");
+
+  useEffect(() => {
+    useLocaleStore.getState().init();
+  }, []);
   const [attempt, setAttempt] = useState(0);
 
   const onToken = useCallback(async (token: string) => {
@@ -78,10 +86,10 @@ export function TurnstileGate({
         return;
       }
       setStatus("error");
-      setMessage("Verification failed. Please try again.");
+      setMessage("turnstile.failed");
     } catch {
       setStatus("error");
-      setMessage("Could not reach the server. Check your connection and try again.");
+      setMessage("turnstile.unreachable");
     }
     if (window.turnstile && widgetIdRef.current) window.turnstile.reset(widgetIdRef.current);
   }, []);
@@ -98,11 +106,11 @@ export function TurnstileGate({
           callback: (token) => void onToken(token),
           "error-callback": () => {
             setStatus("error");
-            setMessage("The security check hit an error. Please retry.");
+            setMessage("turnstile.error");
           },
           "expired-callback": () => {
             setStatus("ready");
-            setMessage("The check expired. Please verify again.");
+            setMessage("turnstile.expired");
           },
         });
         setStatus("ready");
@@ -110,7 +118,7 @@ export function TurnstileGate({
       .catch(() => {
         if (cancelled) return;
         setStatus("error");
-        setMessage("Could not load the security check. Disable blockers for challenges.cloudflare.com and retry.");
+        setMessage("turnstile.loadFailed");
       });
     return () => {
       cancelled = true;
@@ -129,14 +137,14 @@ export function TurnstileGate({
         <ShieldCheck className="mx-auto mb-3 h-8 w-8 text-sky-500" aria-hidden />
         <h1 className="text-lg font-semibold">{APP_NAME}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Confirm you are human to open the simulator.
+          {t("turnstile.prompt")}
         </p>
         <div ref={containerRef} className="mt-5 flex min-h-[65px] justify-center" />
         <p className="mt-3 min-h-5 text-sm" role="status" aria-live="polite">
-          {status === "loading" && <span className="text-slate-500">Loading security check…</span>}
-          {status === "verifying" && <span className="text-slate-500">Verifying…</span>}
+          {status === "loading" && <span className="text-slate-500">{t("turnstile.loading")}</span>}
+          {status === "verifying" && <span className="text-slate-500">{t("turnstile.verifying")}</span>}
           {status !== "loading" && status !== "verifying" && message && (
-            <span className={status === "error" ? "text-red-500" : "text-slate-500"}>{message}</span>
+            <span className={status === "error" ? "text-red-500" : "text-slate-500"}>{t(message)}</span>
           )}
         </p>
         {status === "error" && (
@@ -149,7 +157,7 @@ export function TurnstileGate({
             }}
             className="mt-3 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
           >
-            Retry
+            {t("common.retry")}
           </button>
         )}
       </div>
