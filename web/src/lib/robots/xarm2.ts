@@ -1,14 +1,18 @@
 import type { RobotProfile } from "./types";
 
 /**
- * Hiwonder xArm 2.0: 5-DOF arm with a gripper, driven by bus servos.
+ * Hiwonder xArm 2.0: 5-DOF arm with a gripper, driven by bus servos
+ * (LX-225 shoulder/elbow, LX-15D wrist, HTS-16L gripper) on a CoreX (ESP32 + STM32) controller.
  *
- * ⚠ The link lengths, joint limits, servo directions/offsets and gripper positions below are
- * APPROXIMATE (Hiwonder's spec page was unreachable when this was written). Measure your arm and
- * edit only this file; FK, IK, the 3D model and the hardware driver all read from it.
+ * Link lengths come from Hiwonder's dimensional diagram: 65 mm base -> shoulder, 101 mm upper arm,
+ * 95 mm forearm, 426 mm total height to the gripper tips (so 165 mm wrist-pitch axis -> tips).
+ * The split of those 165 mm between the wrist/roll servo (DF) and the gripper TCP is estimated.
+ *
+ * ⚠ Joint limits, servo directions/offsets and gripper positions are still estimates. Measure your
+ * arm and edit only this file; FK, IK, the 3D model and the hardware driver all read from it.
  *
  * Geometry (mm), Craig MDH. All joints at 0° = arm pointing straight up.
- *   D1  base plate -> shoulder axis
+ *   D1  table -> shoulder axis
  *   L2  shoulder axis -> elbow axis
  *   L3  elbow axis -> wrist-pitch axis
  *   DF  wrist-pitch axis -> gripper mounting face (flange); the gripper's TCP offset is added on top
@@ -16,10 +20,18 @@ import type { RobotProfile } from "./types";
  * J5 rolls the gripper about its own axis. J6 does not exist and is locked at 0.
  */
 export const XARM2_DIMENSIONS_MM = {
-  D1: 105,
-  L2: 100,
+  D1: 65,
+  L2: 101,
   L3: 95,
-  DF: 55,
+  DF: 75,
+} as const;
+
+/** Base plate (277 x 155 mm); the arm's base axis sits on its centre line, near the front end. */
+export const XARM2_BASE_PLATE_MM = {
+  length: 277,
+  width: 155,
+  /** Distance from the base axis to the plate's front (+X) edge. */
+  axisToFrontEdge: 77.5,
 } as const;
 
 const { D1, L2, L3, DF } = XARM2_DIMENSIONS_MM;
@@ -64,28 +76,29 @@ export const XARM2_PROFILE: RobotProfile = {
     { label: "Pick", joints: [-35, 40, 70, 70, 0, 0] },
   ],
   workspace: {
-    xMin: -320,
-    xMax: 320,
-    yMin: -320,
-    yMax: 320,
+    xMin: -350,
+    xMax: 350,
+    yMin: -350,
+    yMax: 350,
     zMin: 0,
     zMax: 430,
     radiusMin: 0,
-    radiusMax: 320,
+    radiusMax: 350,
     baseMinDeg: -180,
     baseMaxDeg: 180,
   },
   reachMm: L2 + L3 + DF,
   analyticIk: "PLANAR_5DOF",
   meshSource: "primitive",
+  // Anodised-blue brackets on a black base, as on the real arm
   meshColors: {
-    base: 0x30343a,
-    link1: 0x4b5058,
-    link2: 0xc9ccd1,
-    link3: 0xc9ccd1,
-    link4: 0x30343a,
-    link5: 0x4b5058,
-    link6: 0x30343a,
+    base: 0x1f2226,
+    link1: 0x1e88e5,
+    link2: 0x1e88e5,
+    link3: 0x1e88e5,
+    link4: 0x1e88e5,
+    link5: 0x1e88e5,
+    link6: 0x1e88e5,
   },
   allowedTools: ["XARM_GRIPPER", "NONE"],
   defaultTool: "XARM_GRIPPER",

@@ -204,6 +204,63 @@ function buildMicroServo(): ToolVisual {
   };
 }
 
+/**
+ * Hiwonder xArm claw: HTS-16L servo + gearbox, two curved fingers on pivots 12 mm off centre.
+ * Finger tips sit 90 mm past the flange; jaws open to 55 mm between the tips.
+ */
+function buildXarmClaw(): ToolVisual {
+  const g = new Group();
+  const blue = mat(0x1e88e5, { metalness: 0.55, roughness: 0.32 });
+  const black = mat(0x1b1d21, { metalness: 0.2, roughness: 0.55 });
+  const silver = mat(0xb8bec6, { metalness: 0.7, roughness: 0.3 });
+  const rubber = mat(0x0f1115, { metalness: 0, roughness: 0.9 });
+  const { ring, setClosed } = statusRing(-4);
+
+  g.add(zCylinder(14, 14, 0, -4, silver));
+  g.add(ring);
+  g.add(box(24, 40, 22, 0, 6, -19, black)); // HTS-16L servo
+  g.add(box(56, 10, 12, 0, 0, -36, blue)); // gearbox plate
+  const PIVOT_X = 12;
+  const PIVOT_Z = -40;
+  const FINGER_LEN = 50;
+
+  const fingers: Group[] = [];
+  for (const side of [-1, 1]) {
+    const gear = zCylinder(7, 7, -30, -42, silver, 16);
+    gear.rotation.set(0, 0, 0); // axis on Y = the finger pivot axis
+    gear.position.set(side * PIVOT_X * MM, -7 * MM, -36 * MM);
+    g.add(gear);
+
+    const pivot = new Group();
+    pivot.position.set(side * PIVOT_X * MM, 0, PIVOT_Z * MM);
+    // Built for the -X finger; the +X finger is its mirror image
+    const finger = new Group();
+    finger.scale.x = side < 0 ? 1 : -1;
+    const upper = box(5, 16, 32, -4, 0, -15, blue);
+    upper.rotation.y = 0.25;
+    const lower = box(5, 16, 24, -4, 0, -38, blue);
+    lower.rotation.y = -0.42;
+    finger.add(upper, lower, box(3, 14, 14, 0.5, 0, -42, rubber));
+    pivot.add(finger);
+    g.add(pivot);
+    fingers.push(pivot);
+  }
+
+  /** Pivot angle that puts each tip `half` mm from the centre line. */
+  const angleFor = (half: number) => Math.asin(Math.max(-1, Math.min(1, (half - PIVOT_X) / FINGER_LEN)));
+  let angle = angleFor(27.5);
+  return {
+    group: g,
+    update(dtMs, closed, held) {
+      setClosed(closed);
+      const target = angleFor(closed ? (held ? held / 2 + 2 : 3) : 27.5);
+      angle = approach(angle, target, dtMs, 0.016);
+      fingers[0].rotation.y = angle;
+      fingers[1].rotation.y = -angle;
+    },
+  };
+}
+
 export function createToolVisual(type: ToolType): ToolVisual {
   let visual: ToolVisual;
   switch (type) {
@@ -211,8 +268,10 @@ export function createToolVisual(type: ToolType): ToolVisual {
       visual = buildSuction();
       break;
     case "TWO_FINGER":
-    case "XARM_GRIPPER":
       visual = buildTwoFinger();
+      break;
+    case "XARM_GRIPPER":
+      visual = buildXarmClaw();
       break;
     case "THREE_FINGER_SOFT":
       visual = buildThreeFingerSoft();
