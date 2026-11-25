@@ -21,6 +21,8 @@ import { StatusBar } from "./StatusBar";
 import { Toolbar, triggerTextDownload } from "./Toolbar";
 import { ViewerCanvas } from "./ViewerCanvas";
 import { XarmHardwareModal } from "./XarmHardwareModal";
+import { useT } from "@/lib/i18n/useT";
+import { t as tNow } from "@/lib/i18n";
 
 function isEditableTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -29,6 +31,7 @@ function isEditableTarget(el: EventTarget | null): boolean {
 }
 
 export function SimulatorShell() {
+  const t = useT();
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const mainRowRef = useRef<HTMLDivElement | null>(null);
 
@@ -131,7 +134,7 @@ export function SimulatorShell() {
 
       if (mod && key === "s") {
         e.preventDefault();
-        useHistoryStore.getState().saveToHistory("Ctrl+S save");
+        useHistoryStore.getState().saveToHistory(tNow("history.ctrlS"));
         return;
       }
 
@@ -245,7 +248,7 @@ export function SimulatorShell() {
       };
     };
     if (!nav.serial) {
-      throw new Error("Web Serial API is not available in this browser.");
+      throw new Error(t("log.webSerialUnavailable"));
     }
     const port = await nav.serial.requestPort({ filters: [{ usbVendorId: 0x1a86 }] });
     await port.open({ baudRate: 115200 });
@@ -256,7 +259,7 @@ export function SimulatorShell() {
       .filter((l) => l && !l.startsWith(";"));
 
     const writer = port.writable?.getWriter();
-    if (!writer) throw new Error("Serial port is not writable.");
+    if (!writer) throw new Error(t("log.serialNotWritable"));
 
     const encoder = new TextEncoder();
     try {
@@ -265,7 +268,7 @@ export function SimulatorShell() {
         appendLog({ dir: "out", text: line });
         await new Promise((r) => setTimeout(r, 40));
       }
-      appendLog({ dir: "ok", text: `Streamed ${lines.length} G-code commands via USB Serial.` });
+      appendLog({ dir: "ok", text: t("log.streamed", { n: lines.length }) });
     } finally {
       writer.releaseLock();
       await port.close();
@@ -307,7 +310,7 @@ export function SimulatorShell() {
               <div
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="Resize workspace and control sidebar"
+                aria-label={t("shell.resizeSidebar")}
                 tabIndex={0}
                 onPointerDown={() => setDraggingSplit("sidebar")}
                 onKeyDown={(e) => {
@@ -340,7 +343,7 @@ export function SimulatorShell() {
           <div
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Resize console height"
+            aria-label={t("shell.resizeConsole")}
             tabIndex={0}
             onPointerDown={() => setDraggingSplit("console")}
             onKeyDown={(e) => {
@@ -372,32 +375,32 @@ export function SimulatorShell() {
       {/* Modals */}
       <TextPromptModal
         open={renameProjectOpen}
-        title="Rename Project"
-        description="Enter a new project name for your Mirobot simulation."
+        title={t("shell.renameProject")}
+        description={t("shell.renameProjectDesc")}
         initialValue={projectName}
-        confirmLabel="Rename"
+        confirmLabel={t("shell.rename")}
         onConfirm={(next) => {
           setProjectName(next, true);
-          appendLog({ dir: "sys", text: `Renamed project to "${next}"` });
+          appendLog({ dir: "sys", text: t("log.renamedProject", { name: next }) });
         }}
         onClose={() => setRenameProjectOpen(false)}
       />
 
       <TextPromptModal
         open={renameTargetState.open}
-        title="Rename Waypoint"
-        description="Enter a new label for the selected waypoint."
+        title={t("shell.renameWaypoint")}
+        description={t("shell.renameWaypointDesc")}
         initialValue={renameTargetState.name}
-        confirmLabel="Rename"
+        confirmLabel={t("shell.rename")}
         onConfirm={(next) => renameTarget(renameTargetState.index, next)}
         onClose={() => setRenameTargetState({ open: false, index: -1, name: "" })}
       />
 
       <ConfirmModal
         open={confirmClearOpen}
-        title="Clear All Waypoints?"
-        message="This removes all waypoints from the current path (you can still Undo)."
-        confirmLabel="Clear All"
+        title={t("shell.clearTitle")}
+        message={t("shell.clearMessage")}
+        confirmLabel={t("shell.clearAll")}
         danger
         onConfirm={() => clearTargets()}
         onClose={() => setConfirmClearOpen(false)}
@@ -405,11 +408,11 @@ export function SimulatorShell() {
 
       <ConfirmModal
         open={confirmNewOpen}
-        title="Start New Program?"
-        message="You have unsaved changes. Starting a new program will save a backup to Work History first, then reset your workspace."
-        confirmLabel="Backup & Start New"
+        title={t("shell.newTitle")}
+        message={t("shell.newMessage")}
+        confirmLabel={t("shell.newConfirm")}
         onConfirm={() => {
-          saveToHistory("Auto-backup before New");
+          saveToHistory(t("history.backupBeforeNew"));
           newProgram();
         }}
         onClose={() => setConfirmNewOpen(false)}
@@ -417,9 +420,9 @@ export function SimulatorShell() {
 
       <ConfirmModal
         open={confirmResetOpen}
-        title="Reset Workspace?"
-        message="Clears the saved session (waypoints, code, boxes and layout) and reloads with defaults. A backup is saved to Work History first, so you can restore it later."
-        confirmLabel="Backup & Reset"
+        title={t("shell.resetTitle")}
+        message={t("shell.resetMessage")}
+        confirmLabel={t("shell.resetConfirm")}
         danger
         onConfirm={() => resetWorkspace()}
         onClose={() => setConfirmResetOpen(false)}
@@ -429,7 +432,7 @@ export function SimulatorShell() {
         open={historyModalOpen}
         entries={historyEntries}
         isDirty={dirty}
-        onSaveNow={() => saveToHistory("Manual snapshot")}
+        onSaveNow={() => saveToHistory(t("history.manualSnapshot"))}
         onRestore={(id) => restoreFromHistory(id)}
         onDelete={(id) => deleteFromHistory(id)}
         onClearAll={() => clearHistory()}
@@ -446,10 +449,10 @@ export function SimulatorShell() {
         open={downloadModalOpen}
         gcodePreview={resolvedGcode.gcode}
         targetCount={resolvedGcode.count}
-        sourceLabel={resolvedGcode.source === "code" ? "Code commands" : "waypoints"}
+        sourceLabel={resolvedGcode.source === "code" ? t("modal.sourceCode") : t("modal.sourceWaypoints")}
         onDownloadGcode={() => {
           triggerTextDownload(`${safeSlug}.gcode`, resolvedGcode.gcode, "text/plain");
-          appendLog({ dir: "ok", text: `[ROBOT] Exported ${safeSlug}.gcode` });
+          appendLog({ dir: "ok", text: `[ROBOT] ${t("log.exported", { file: `${safeSlug}.gcode` })}` });
         }}
         onSendWebSerial={handleSendWebSerial}
         onClose={() => setDownloadModalOpen(false)}
