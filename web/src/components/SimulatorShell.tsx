@@ -237,7 +237,7 @@ export function SimulatorShell() {
     return { source: "path" as const, gcode: "", count: 0 };
   })();
 
-  const handleSendWebSerial = async () => {
+  const handleSendWebSerial = async (baudRate = 115200) => {
     const nav = navigator as Navigator & {
       serial?: {
         requestPort: (options?: { filters?: Array<{ usbVendorId: number }> }) => Promise<{
@@ -251,7 +251,7 @@ export function SimulatorShell() {
       throw new Error(t("log.webSerialUnavailable"));
     }
     const port = await nav.serial.requestPort({ filters: [{ usbVendorId: 0x1a86 }] });
-    await port.open({ baudRate: 115200 });
+    await port.open({ baudRate });
     const gcode = resolvedGcode.gcode;
     const lines = gcode
       .split(/\r?\n/)

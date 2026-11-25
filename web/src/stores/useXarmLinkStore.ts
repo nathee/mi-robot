@@ -52,6 +52,7 @@ interface XarmLinkState {
   connected: boolean;
   transport: XarmTransportKind;
   deviceLabel: string;
+  baudRate: number;
   /** Stream every simulator pose change to the servos. */
   mirror: boolean;
   /** Torque off + continuous read-back: move the real arm by hand and the simulator follows. */
@@ -63,6 +64,7 @@ interface XarmLinkState {
   rxCount: number;
   lastError: string;
 
+  setBaudRate: (baud: number) => void;
   connectHid: () => Promise<void>;
   connectSerial: () => Promise<void>;
   /** Wires an already-open transport (used by connectHid / connectSerial, and by tests). */
@@ -186,6 +188,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     connected: false,
     transport: "NONE",
     deviceLabel: "",
+    baudRate: XARM_UART_BAUD,
     mirror: false,
     teach: false,
     maxSpeedDegPerSec: 90,
@@ -193,6 +196,10 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
     txCount: 0,
     rxCount: 0,
     lastError: "",
+
+    setBaudRate(baudRate) {
+      set({ baudRate });
+    },
 
     async connectHid() {
       const hid = (navigator as Navigator & { hid?: HidLike }).hid;
@@ -247,14 +254,15 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         return;
       }
       try {
+        const baud = get().baudRate;
         const port = await serial.requestPort();
-        await port.open({ baudRate: XARM_UART_BAUD });
+        await port.open({ baudRate: baud });
         const writer = port.writable?.getWriter() ?? null;
         const reader = port.readable?.getReader() ?? null;
         let open = true;
         get().attachTransport({
           kind: "SERIAL",
-          label: `USB serial @ ${XARM_UART_BAUD}`,
+          label: `USB serial @ ${baud}`,
           send: async (frame) => {
             if (!writer) throw new Error(t("log.serialNotWritable"));
             await writer.write(frame);

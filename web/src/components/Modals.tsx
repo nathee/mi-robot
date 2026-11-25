@@ -182,13 +182,15 @@ export function ConfirmModal({
   );
 }
 
+const BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400];
+
 interface DownloadRobotModalProps {
   open: boolean;
   gcodePreview: string;
   targetCount: number;
   sourceLabel?: string;
   onDownloadGcode: () => void;
-  onSendWebSerial: () => Promise<void>;
+  onSendWebSerial: (baudRate: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -202,6 +204,7 @@ function DownloadRobotModalInner({
 }: Omit<DownloadRobotModalProps, "open">) {
   const t = useT();
   const [sending, setSending] = useState(false);
+  const [baudRate, setBaudRate] = useState(115200);
   const [serialError, setSerialError] = useState("");
   const hasWebSerial = typeof navigator !== "undefined" && "serial" in navigator;
 
@@ -211,7 +214,7 @@ function DownloadRobotModalInner({
     setSending(true);
     setSerialError("");
     try {
-      await onSendWebSerial();
+      await onSendWebSerial(baudRate);
       onClose();
     } catch (err) {
       setSerialError(err instanceof Error ? err.message : t("modal.serialFailed"));
@@ -279,6 +282,20 @@ function DownloadRobotModalInner({
             <Download className="h-3.5 w-3.5" />
             {t("modal.saveGcode")}
           </button>
+          <select
+            aria-label={t("hw.baud")}
+            title={t("hw.baud")}
+            disabled={sending}
+            value={baudRate}
+            onChange={(e) => setBaudRate(Number(e.target.value))}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 font-mono text-xs text-slate-700 outline-none focus:border-sky-500 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
+          >
+            {BAUD_RATES.map((b) => (
+              <option key={b} value={b}>
+                {b} bps
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             disabled={!targetCount || !hasWebSerial || sending}

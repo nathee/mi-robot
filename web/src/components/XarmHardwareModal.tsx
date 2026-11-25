@@ -28,6 +28,8 @@ interface XarmHardwareModalProps {
 const BTN =
   "inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300";
 
+const BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400];
+
 const hex4 = (n: number) => `0x${n.toString(16).padStart(4, "0").toUpperCase()}`;
 
 function Row({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
@@ -48,6 +50,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
   const connected = useXarmLinkStore((s) => s.connected);
   const transport = useXarmLinkStore((s) => s.transport);
   const deviceLabel = useXarmLinkStore((s) => s.deviceLabel);
+  const baudRate = useXarmLinkStore((s) => s.baudRate);
   const mirror = useXarmLinkStore((s) => s.mirror);
   const teach = useXarmLinkStore((s) => s.teach);
   const maxSpeed = useXarmLinkStore((s) => s.maxSpeedDegPerSec);
@@ -152,10 +155,30 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                   <PlugZap className="h-4 w-4" />
                   {t("xarm.connectHid")}
                 </button>
-                <button type="button" onClick={() => void link.connectSerial()} disabled={!hasSerial} className={BTN}>
-                  <Cable className="h-4 w-4" />
-                  {t("xarm.connectSerial", { baud: XARM_UART_BAUD })}
-                </button>
+                <div className="flex gap-1.5">
+                  <select
+                    aria-label={t("hw.baud")}
+                    title={t("hw.baud")}
+                    value={baudRate}
+                    onChange={(e) => link.setBaudRate(Number(e.target.value))}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-2 font-mono text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    {BAUD_RATES.map((b) => (
+                      <option key={b} value={b}>
+                        {b === XARM_UART_BAUD ? `${b} (xArm)` : b}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void link.connectSerial()}
+                    disabled={!hasSerial}
+                    className={`${BTN} flex-1`}
+                  >
+                    <Cable className="h-4 w-4" />
+                    {t("xarm.connectSerial", { baud: baudRate })}
+                  </button>
+                </div>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                 {t("xarm.plugA")}<strong>USB (HID)</strong>{t("xarm.plugB")}{" "}

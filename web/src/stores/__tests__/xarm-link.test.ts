@@ -128,4 +128,11 @@ describe("xArm link store", () => {
     // sanity: helpers agree on frame layout
     expect(parseReply(buildMovePacket([{ id: 1, pos: 1 }], 1))?.kind).toBe("OTHER");
   });
+
+  it("allows changing the serial baud rate", () => {
+    expect(useXarmLinkStore.getState().baudRate).toBe(9600);
+    useXarmLinkStore.getState().setBaudRate(115200);
+    expect(useXarmLinkStore.getState().baudRate).toBe(115200);
+    useXarmLinkStore.getState().setBaudRate(9600);
+  });
 });
