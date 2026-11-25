@@ -101,6 +101,8 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       activeLine: null,
       activeBlockId: null,
       runtime: null,
+      blocksUndoStack: [],
+      blocksRedoStack: [],
     });
 
     useProjectStore.getState().setName(data.projectName || "Untitled Project", false);

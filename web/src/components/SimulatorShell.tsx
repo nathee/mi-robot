@@ -9,6 +9,7 @@ import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
+import { useViewerStore } from "@/stores/useViewerStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { ControlSidebar } from "./ControlSidebar";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
@@ -154,15 +155,18 @@ export function SimulatorShell() {
           e.preventDefault();
           path.pasteTarget();
         }
-      } else if (mod && key === "z" && !e.shiftKey) {
-        if (path.undoStack.length) {
+      } else if (mod && (key === "z" || key === "y")) {
+        // Undo/redo belongs to the editor on screen: Blocks when the Code tab shows Blocks, else Path.
+        const redo = key === "y" || e.shiftKey;
+        const code = useCodeStore.getState();
+        if (useViewerStore.getState().sidebarPanel === "CODE" && code.mode === "BLOCKS") {
           e.preventDefault();
-          path.undo();
-        }
-      } else if ((mod && key === "y") || (mod && e.shiftKey && key === "z")) {
-        if (path.redoStack.length) {
+          if (redo) code.redoBlocks();
+          else code.undoBlocks();
+        } else if (redo ? path.redoStack.length : path.undoStack.length) {
           e.preventDefault();
-          path.redo();
+          if (redo) path.redo();
+          else path.undo();
         }
       } else if (e.key === "Delete") {
         if (path.activeTargetIndex >= 0 && path.status !== "PLAYING" && path.status !== "PAUSED") {

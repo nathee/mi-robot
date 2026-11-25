@@ -26,6 +26,8 @@ import {
   Square,
   Trash2,
   Wrench,
+  Redo2,
+  Undo2,
 } from "lucide-react";
 import { nextBlockId } from "@/lib/program/blocks";
 import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
@@ -38,6 +40,9 @@ import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { triggerTextDownload } from "./Toolbar";
+
+/** Same text on server and client (no hydration mismatch); ⌘ on macOS, Ctrl elsewhere. */
+const MOD_KEY = "⌘/Ctrl";
 import { NumericInput } from "./ui";
 
 const STATUS_BADGE: Record<string, string> = {
@@ -719,6 +724,10 @@ export function CodePanel() {
   const addBlock = useCodeStore((s) => s.addBlock);
   const moveBlock = useCodeStore((s) => s.moveBlock);
   const loadSampleBlocks = useCodeStore((s) => s.loadSampleBlocks);
+  const undoBlocks = useCodeStore((s) => s.undoBlocks);
+  const redoBlocks = useCodeStore((s) => s.redoBlocks);
+  const canUndoBlocks = useCodeStore((s) => s.blocksUndoStack.length > 0);
+  const canRedoBlocks = useCodeStore((s) => s.blocksRedoStack.length > 0);
   const insertCurrentPose = useCodeStore((s) => s.insertCurrentPose);
   const convertBlocksToGcode = useCodeStore((s) => s.convertBlocksToGcode);
   const convertBlocksToScript = useCodeStore((s) => s.convertBlocksToScript);
@@ -868,15 +877,38 @@ export function CodePanel() {
           <section className="space-y-2">
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <span>Add Block</span>
-              <button
-                type="button"
-                disabled={isLocked}
-                onClick={loadSampleBlocks}
-                className="inline-flex items-center gap-1 normal-case tracking-normal text-sky-600 hover:underline disabled:opacity-40 dark:text-sky-400"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Load Demo
-              </button>
+              <div className="flex items-center gap-1 normal-case tracking-normal">
+                <button
+                  type="button"
+                  disabled={isLocked || !canUndoBlocks}
+                  onClick={undoBlocks}
+                  title={`Undo block edit (${MOD_KEY}+Z)`}
+                  aria-label="Undo block edit"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={isLocked || !canRedoBlocks}
+                  onClick={redoBlocks}
+                  title={`Redo block edit (${MOD_KEY}+Y / ${MOD_KEY}+Shift+Z)`}
+                  aria-label="Redo block edit"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                >
+                  <Redo2 className="h-3.5 w-3.5" />
+                </button>
+                <span className="mx-1 h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
+                <button
+                  type="button"
+                  disabled={isLocked}
+                  onClick={loadSampleBlocks}
+                  className="inline-flex items-center gap-1 text-sky-600 hover:underline disabled:opacity-40 dark:text-sky-400"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Load Demo
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button

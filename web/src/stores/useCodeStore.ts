@@ -66,9 +66,18 @@ interface CodeState {
   stepProgress: number;
   runtime: ActiveStepRuntime | null;
 
+  /** Blocks editor history: previous / undone block lists (newest last). */
+  blocksUndoStack: ProgramBlock[][];
+  blocksRedoStack: ProgramBlock[][];
+
   // Mode & Editing
   setMode: (mode: CodeEditorMode) => void;
   setBlocks: (blocks: ProgramBlock[]) => void;
+  /** Reverts the last Blocks edit. Returns false when there is nothing to undo or a program is running. */
+  undoBlocks: () => boolean;
+  redoBlocks: () => boolean;
+  /** Forgets the Blocks history (e.g. after restoring a saved snapshot). */
+  clearBlocksHistory: () => void;
   setScriptText: (text: string) => void;
   setGcodeText: (text: string) => void;
 
@@ -184,7 +193,46 @@ function computeStepDurationMs(
   return Math.max(300, (distMm * 1.5 * 1000) / mmPerSec);
 }
 
-export const useCodeStore = create<CodeState>((set, get) => ({
+export const BLOCKS_HISTORY_LIMIT = 100;
+/** Edits to the same block field within this window merge into one undo step (typing a number). */
+const BLOCKS_COALESCE_MS = 1000;
+let lastBlocksEdit: { key: string; at: number } | null = null;
+
+export const useCodeStore = create<CodeState>((set, get) => {
+  /**
+   * Replaces the block list and records the previous one for Undo. Block lists are updated
+   * immutably, so storing references is enough. `coalesceKey` merges rapid edits of one field.
+   */
+  const commitBlocks = (next: ProgramBlock[], coalesceKey?: string, extra: Partial<CodeState> = {}) => {
+    const prev = get().blocks;
+    if (next === prev) return;
+    const now = Date.now();
+    const merge =
+      coalesceKey !== undefined &&
+      lastBlocksEdit?.key === coalesceKey &&
+      now - lastBlocksEdit.at < BLOCKS_COALESCE_MS &&
+      get().blocksUndoStack.length > 0;
+    lastBlocksEdit = coalesceKey !== undefined ? { key: coalesceKey, at: now } : null;
+    set((s) => ({
+      ...extra,
+      blocks: next,
+      errors: extra.errors ?? [],
+      blocksUndoStack: merge ? s.blocksUndoStack : [...s.blocksUndoStack, prev].slice(-BLOCKS_HISTORY_LIMIT),
+      blocksRedoStack: [],
+    }));
+    useProjectStore.getState().setDirty(true);
+  };
+
+  const canEditHistory = () => {
+    const status = get().status;
+    if (status === "RUNNING" || status === "PAUSED") {
+      logCode("Stop the program before undoing block edits", "error");
+      return false;
+    }
+    return true;
+  };
+
+  return {
   mode: "BLOCKS",
   blocks: createDemoBlocks(),
   scriptText: SAMPLE_SCRIPTS.pickLoop.code,
@@ -198,6 +246,8 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   activeBlockId: null,
   stepProgress: 0,
   runtime: null,
+  blocksUndoStack: [],
+  blocksRedoStack: [],
 
   setMode(mode) {
     if (get().status === "RUNNING") get().stop("Switched code editor mode");
@@ -205,8 +255,44 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   setBlocks(blocks) {
-    set({ blocks, errors: [] });
+    commitBlocks(blocks);
+  },
+
+  undoBlocks() {
+    const { blocksUndoStack, blocks } = get();
+    if (!blocksUndoStack.length || !canEditHistory()) return false;
+    lastBlocksEdit = null;
+    set((s) => ({
+      blocks: blocksUndoStack[blocksUndoStack.length - 1],
+      blocksUndoStack: blocksUndoStack.slice(0, -1),
+      blocksRedoStack: [...s.blocksRedoStack, blocks].slice(-BLOCKS_HISTORY_LIMIT),
+      errors: [],
+      activeBlockId: null,
+    }));
     useProjectStore.getState().setDirty(true);
+    logCode("Undo block edit");
+    return true;
+  },
+
+  redoBlocks() {
+    const { blocksRedoStack, blocks } = get();
+    if (!blocksRedoStack.length || !canEditHistory()) return false;
+    lastBlocksEdit = null;
+    set((s) => ({
+      blocks: blocksRedoStack[blocksRedoStack.length - 1],
+      blocksRedoStack: blocksRedoStack.slice(0, -1),
+      blocksUndoStack: [...s.blocksUndoStack, blocks].slice(-BLOCKS_HISTORY_LIMIT),
+      errors: [],
+      activeBlockId: null,
+    }));
+    useProjectStore.getState().setDirty(true);
+    logCode("Redo block edit");
+    return true;
+  },
+
+  clearBlocksHistory() {
+    lastBlocksEdit = null;
+    set({ blocksUndoStack: [], blocksRedoStack: [] });
   },
 
   setScriptText(scriptText) {
@@ -220,66 +306,53 @@ export const useCodeStore = create<CodeState>((set, get) => ({
   },
 
   addBlock(block, parentRepeatId) {
-    useProjectStore.getState().setDirty(true);
-    if (!parentRepeatId) {
-      set((s) => ({ blocks: [...s.blocks, block], errors: [] }));
-      return;
-    }
-    set((s) => ({
-      blocks: mapBlocksRecursive(s.blocks, (b) =>
-        b.id === parentRepeatId && b.kind === "REPEAT"
-          ? { ...b, children: [...b.children, block] }
-          : b
-      ),
-      errors: [],
-    }));
+    const blocks = get().blocks;
+    commitBlocks(
+      parentRepeatId
+        ? mapBlocksRecursive(blocks, (b) =>
+            b.id === parentRepeatId && b.kind === "REPEAT" ? { ...b, children: [...b.children, block] } : b
+          )
+        : [...blocks, block]
+    );
   },
 
   updateBlock(id, updater) {
-    useProjectStore.getState().setDirty(true);
-    set((s) => ({
-      blocks: mapBlocksRecursive(s.blocks, (b) => (b.id === id ? updater(b) : b)),
-      errors: [],
-    }));
+    commitBlocks(
+      mapBlocksRecursive(get().blocks, (b) => (b.id === id ? updater(b) : b)),
+      `update:${id}`
+    );
   },
 
   duplicateBlock(id) {
     const { blocks, newId } = duplicateBlockInList(get().blocks, id);
     if (!newId) return;
-    useProjectStore.getState().setDirty(true);
-    set({ blocks, errors: [] });
+    commitBlocks(blocks);
   },
 
   removeBlock(id) {
-    useProjectStore.getState().setDirty(true);
-    set((s) => ({
-      blocks: mapBlocksRecursive(s.blocks, (b) => (b.id === id ? null : b)),
-      errors: [],
-    }));
+    commitBlocks(mapBlocksRecursive(get().blocks, (b) => (b.id === id ? null : b)));
   },
 
   moveBlock(fromIdx, toIdx) {
-    useProjectStore.getState().setDirty(true);
-    set((s) => {
-      if (
-        fromIdx < 0 ||
-        toIdx < 0 ||
-        fromIdx >= s.blocks.length ||
-        toIdx >= s.blocks.length ||
-        fromIdx === toIdx
-      ) {
-        return s;
-      }
-      const next = s.blocks.slice();
-      const [item] = next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, item);
-      return { blocks: next };
-    });
+    const blocks = get().blocks;
+    if (
+      fromIdx < 0 ||
+      toIdx < 0 ||
+      fromIdx >= blocks.length ||
+      toIdx >= blocks.length ||
+      fromIdx === toIdx
+    ) {
+      return;
+    }
+    const next = blocks.slice();
+    const [item] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, item);
+    commitBlocks(next);
   },
 
   loadSampleBlocks() {
     get().stop();
-    set({ blocks: createDemoBlocks(), errors: [] });
+    commitBlocks(createDemoBlocks());
     logCode("Loaded Demo Pick & Place visual blocks");
   },
 
@@ -414,8 +487,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
     const scriptText = `# Generated from Path (${path.targets.length} waypoints)\n${blocksToScript(blocks)}\n`;
     const gcodeText = res.errors.length ? "" : blocksToGcode(blocks, projectName, tool);
 
-    set({
-      blocks,
+    commitBlocks(blocks, undefined, {
       scriptText,
       gcodeText,
       mode: "BLOCKS",
@@ -425,7 +497,6 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       activeLine: null,
       activeBlockId: null,
     });
-    useProjectStore.getState().setDirty(true);
     warnings.forEach((w) => logCode(w));
     if (res.errors.length) {
       logCode(`Generated Blocks from Path with ${res.errors.length} error(s); G-code not generated`, "error");
@@ -679,4 +750,5 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       },
     });
   },
-}));
+};
+});
