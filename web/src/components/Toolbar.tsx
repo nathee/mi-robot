@@ -33,8 +33,10 @@ import { useXarmLinkStore } from "@/stores/useXarmLinkStore";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore, type ThemeMode } from "@/stores/useThemeStore";
+import { useLocaleStore } from "@/stores/useLocaleStore";
 import { APP_NAME } from "@/lib/appConfig";
 import { useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 interface ToolbarProps {
   sidebarOpen: boolean;
@@ -71,6 +73,7 @@ export function Toolbar({
   onRequestOpenHardware,
   onRequestResetWorkspace,
 }: ToolbarProps) {
+  const t = useT();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -83,6 +86,8 @@ export function Toolbar({
 
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
+  const locale = useLocaleStore((s) => s.locale);
+  const setLocale = useLocaleStore((s) => s.setLocale);
 
   const historyCount = useHistoryStore((s) => s.entries.length);
   const saveToHistory = useHistoryStore((s) => s.saveToHistory);
@@ -130,19 +135,19 @@ export function Toolbar({
     if (fmt === "gcode") {
       const content = targetsCount > 0 ? exportGcodeString() : getCodeGcode();
       if (!content) {
-        appendLog({ dir: "error", text: "[EXPORT] Nothing valid to export as G-code." });
+        appendLog({ dir: "error", text: `[EXPORT] ${t("log.exportNothing")}` });
         return;
       }
       triggerTextDownload(`${safeSlug}.gcode`, content, "text/plain");
       setFileMeta({ fileName: safeSlug, fileFormat: "gcode", dirty: false });
-      saveToHistory("Exported G-code");
-      appendLog({ dir: "ok", text: `[EXPORT] Saved ${safeSlug}.gcode` });
+      saveToHistory(t("history.exportedGcode"));
+      appendLog({ dir: "ok", text: `[EXPORT] ${t("log.saved", { file: `${safeSlug}.gcode` })}` });
     } else {
       triggerTextDownload(`${safeSlug}.json`, exportJsonString(), "application/json");
       setFileMeta({ fileName: safeSlug, fileFormat: "json", dirty: false });
       setDirty(false);
-      saveToHistory("Saved JSON");
-      appendLog({ dir: "ok", text: `[PATH] Saved ${safeSlug}.json` });
+      saveToHistory(t("history.savedJson"));
+      appendLog({ dir: "ok", text: `[PATH] ${t("log.saved", { file: `${safeSlug}.json` })}` });
     }
   };
 
@@ -153,11 +158,11 @@ export function Toolbar({
     try {
       const text = await file.text();
       importProgramText(file.name, text);
-      saveToHistory(`Opened ${file.name}`);
+      saveToHistory(t("history.opened", { file: file.name }));
     } catch (err) {
       appendLog({
         dir: "error",
-        text: `ERROR: ${err instanceof Error ? err.message : "Failed to load file"}`,
+        text: `ERROR: ${err instanceof Error ? err.message : t("log.loadFailed")}`,
       });
     }
   };
@@ -170,7 +175,11 @@ export function Toolbar({
 
   const ThemeIcon = themeMode === "light" ? Sun : themeMode === "dark" ? Moon : Monitor;
   const themeLabel =
-    themeMode === "light" ? "Light theme" : themeMode === "dark" ? "Dark theme" : "Auto theme";
+    themeMode === "light"
+      ? t("toolbar.themeLight")
+      : themeMode === "dark"
+        ? t("toolbar.themeDark")
+        : t("toolbar.themeAuto");
 
   return (
     <header className="flex h-13 shrink-0 items-center justify-between gap-3 border-b border-slate-200/90 bg-white px-4 dark:border-slate-800 dark:bg-slate-900/95">
@@ -193,7 +202,7 @@ export function Toolbar({
         <button
           type="button"
           onClick={() => useRobotModelStore.getState().openSelector()}
-          title={`${robotProfile.name} — click to switch robot arm`}
+          title={t("toolbar.switchRobot", { name: robotProfile.name })}
           className="inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
         >
           <ArrowLeftRight className="h-3 w-3 shrink-0" />
@@ -203,17 +212,17 @@ export function Toolbar({
         <button
           type="button"
           onClick={onRequestRenameProject}
-          title="Click to rename project"
+          title={t("toolbar.renameProject")}
           className="group inline-flex min-w-0 items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-200/80 hover:bg-slate-50 dark:text-slate-200 dark:hover:border-slate-700/80 dark:hover:bg-slate-800/70"
         >
           <span className="max-w-32 truncate sm:max-w-48">{projectName}</span>
           {dirty ? (
             <span
               className="h-2 w-2 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-500/20"
-              title="Unsaved changes — press Ctrl+S or click Save"
+              title={t("toolbar.unsaved")}
             />
           ) : (
-            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label="Saved" />
+            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label={t("toolbar.saved")} />
           )}
           <Pencil className="h-3 w-3 shrink-0 text-slate-400 opacity-0 transition group-hover:opacity-100" />
         </button>
@@ -233,7 +242,7 @@ export function Toolbar({
         <button
           type="button"
           onClick={onRequestOpenHardware}
-          title={isBusServo ? "Connect the real arm over USB" : "Connect USB-RS485 or ESP32 Wi-Fi"}
+          title={isBusServo ? t("toolbar.hwBusTitle") : t("toolbar.hwRs485Title")}
           className={`inline-flex h-8.5 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
             hwConnected
               ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
@@ -246,7 +255,7 @@ export function Toolbar({
             }`}
           />
           <Cable className="h-3.5 w-3.5" />
-          <span className="hidden lg:inline">{isBusServo ? "Real arm" : "RS485"}</span>
+          <span className="hidden lg:inline">{isBusServo ? t("toolbar.realArm") : "RS485"}</span>
           {hwConnected && !isBusServo && hwRxCount > 0 && (
             <span className="font-mono text-[10px] tabular-nums opacity-80">{hwRxCount}</span>
           )}
@@ -256,8 +265,8 @@ export function Toolbar({
         <div className="inline-flex items-center rounded-lg border border-slate-200/80 bg-slate-50/70 p-0.5 dark:border-slate-800 dark:bg-slate-900/70">
           <button
             type="button"
-            onClick={() => saveToHistory("Manual save")}
-            title="Save snapshot to Work History (Ctrl+S)"
+            onClick={() => saveToHistory(t("history.manualSave"))}
+            title={t("toolbar.saveTitle")}
             className={`inline-flex h-7.5 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition ${
               dirty
                 ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
@@ -265,7 +274,7 @@ export function Toolbar({
             }`}
           >
             <Save className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">{dirty ? "Save" : "Saved"}</span>
+            <span className="hidden md:inline">{dirty ? t("toolbar.save") : t("toolbar.saved")}</span>
           </button>
 
           <div className="mx-0.5 h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
@@ -273,7 +282,7 @@ export function Toolbar({
           <button
             type="button"
             onClick={onRequestOpenHistory}
-            title="Work History — view and restore snapshots"
+            title={t("toolbar.historyTitle")}
             className="inline-flex h-7.5 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <Clock className="h-3.5 w-3.5" />
@@ -299,7 +308,7 @@ export function Toolbar({
             }`}
           >
             <FolderOpen className="h-3.5 w-3.5 text-sky-500" />
-            <span className="hidden sm:inline">Program</span>
+            <span className="hidden sm:inline">{t("toolbar.program")}</span>
             <ChevronDown className={`h-3.5 w-3.5 opacity-60 transition-transform ${fileMenuOpen ? "rotate-180" : ""}`} />
           </button>
 
@@ -318,7 +327,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FilePlus2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="flex-1">New Program</span>
+                <span className="flex-1">{t("toolbar.newProgram")}</span>
               </button>
               <button
                 type="button"
@@ -330,7 +339,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FolderOpen className="h-3.5 w-3.5 text-slate-400" />
-                <span className="flex-1">Open JSON / G-code…</span>
+                <span className="flex-1">{t("toolbar.open")}</span>
               </button>
               <div className="my-1.5 h-px bg-slate-100 dark:bg-slate-800" />
               <button
@@ -340,7 +349,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <Save className="h-3.5 w-3.5 text-slate-400" />
-                <span className="flex-1">Download Project (.json)</span>
+                <span className="flex-1">{t("toolbar.downloadJson")}</span>
               </button>
               <button
                 type="button"
@@ -350,7 +359,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 <FileCode2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="flex-1">Export WLKATA G-code</span>
+                <span className="flex-1">{t("toolbar.exportGcode")}</span>
               </button>
               <button
                 type="button"
@@ -363,7 +372,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left font-medium text-sky-600 hover:bg-sky-50 disabled:opacity-40 dark:text-sky-400 dark:hover:bg-sky-950/50"
               >
                 <Download className="h-3.5 w-3.5" />
-                <span className="flex-1">Send to Robot (USB / File)</span>
+                <span className="flex-1">{t("toolbar.sendToRobot")}</span>
               </button>
               <div className="my-1.5 h-px bg-slate-100 dark:bg-slate-800" />
               <button
@@ -376,7 +385,7 @@ export function Toolbar({
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span className="flex-1">Reset Workspace…</span>
+                <span className="flex-1">{t("toolbar.resetWorkspace")}</span>
               </button>
             </div>
           )}
@@ -391,19 +400,30 @@ export function Toolbar({
             cancelPath();
             setHome();
           }}
-          title={`Return robot to Home position (${robotProfile.home.join(", ")})`}
+          title={t("toolbar.homeTitle", { joints: robotProfile.home.join(", ") })}
           className="inline-flex h-8.5 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500"
         >
           <Home className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Home</span>
+          <span className="hidden sm:inline">{t("toolbar.home")}</span>
+        </button>
+
+        {/* Language toggle EN / TH */}
+        <button
+          type="button"
+          onClick={() => setLocale(locale === "th" ? "en" : "th")}
+          title={`${t("lang.switch")}: ${locale === "th" ? t("lang.th") : t("lang.en")}`}
+          aria-label={t("lang.switch")}
+          className="inline-flex h-8.5 min-w-8.5 items-center justify-center rounded-lg px-1.5 font-mono text-[11px] font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+        >
+          {locale === "th" ? "TH" : "EN"}
         </button>
 
         {/* Compact Theme Toggle (single clean button cycling Light / Dark / Auto) */}
         <button
           type="button"
           onClick={cycleTheme}
-          title={`${themeLabel} — click to switch`}
-          aria-label={`${themeLabel} — click to switch`}
+          title={t("toolbar.clickToSwitch", { label: themeLabel })}
+          aria-label={t("toolbar.clickToSwitch", { label: themeLabel })}
           className="inline-flex h-8.5 w-8.5 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
         >
           <ThemeIcon className="h-4 w-4" />
@@ -413,8 +433,8 @@ export function Toolbar({
         <button
           type="button"
           onClick={onToggleSidebar}
-          title={sidebarOpen ? "Hide control panel (Ctrl+B)" : "Show control panel (Ctrl+B)"}
-          aria-label={sidebarOpen ? "Hide control panel" : "Show control panel"}
+          title={`${sidebarOpen ? t("toolbar.hidePanel") : t("toolbar.showPanel")} (Ctrl+B)`}
+          aria-label={sidebarOpen ? t("toolbar.hidePanel") : t("toolbar.showPanel")}
           className={`inline-flex h-8.5 w-8.5 items-center justify-center rounded-lg transition ${
             sidebarOpen
               ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"

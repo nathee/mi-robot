@@ -7,6 +7,7 @@ import {
   type WorkspaceHistoryEntry,
 } from "@/lib/storage/workspaceStorage";
 import { useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 interface TextPromptModalProps {
   open: boolean;
@@ -22,10 +23,11 @@ function TextPromptModalInner({
   title,
   description,
   initialValue,
-  confirmLabel = "Save",
+  confirmLabel,
   onConfirm,
   onClose,
 }: Omit<TextPromptModalProps, "open">) {
+  const t = useT();
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState("");
 
@@ -35,7 +37,7 @@ function TextPromptModalInner({
     e.preventDefault();
     const trimmed = value.trim();
     if (!trimmed) {
-      setError("Name cannot be empty");
+      setError(t("modal.nameEmpty"));
       return;
     }
     onConfirm(trimmed);
@@ -58,7 +60,7 @@ function TextPromptModalInner({
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
@@ -84,13 +86,13 @@ function TextPromptModalInner({
               onClick={onClose}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               className="rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
             >
-              {confirmLabel}
+              {confirmLabel ?? t("toolbar.save")}
             </button>
           </div>
         </form>
@@ -118,11 +120,12 @@ export function ConfirmModal({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
+  confirmLabel,
   danger = false,
   onConfirm,
   onClose,
 }: ConfirmModalProps) {
+  const t = useT();
   useEscapeKey(open, onClose);
   if (!open) return null;
 
@@ -159,7 +162,7 @@ export function ConfirmModal({
             onClick={onClose}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -171,7 +174,7 @@ export function ConfirmModal({
               danger ? "bg-rose-600 hover:bg-rose-500" : "bg-sky-600 hover:bg-sky-500"
             }`}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("modal.confirm")}
           </button>
         </div>
       </div>
@@ -192,11 +195,12 @@ interface DownloadRobotModalProps {
 function DownloadRobotModalInner({
   gcodePreview,
   targetCount,
-  sourceLabel = "targets",
+  sourceLabel,
   onDownloadGcode,
   onSendWebSerial,
   onClose,
 }: Omit<DownloadRobotModalProps, "open">) {
+  const t = useT();
   const [sending, setSending] = useState(false);
   const [serialError, setSerialError] = useState("");
   const hasWebSerial = typeof navigator !== "undefined" && "serial" in navigator;
@@ -210,7 +214,7 @@ function DownloadRobotModalInner({
       await onSendWebSerial();
       onClose();
     } catch (err) {
-      setSerialError(err instanceof Error ? err.message : "Failed to send over Web Serial");
+      setSerialError(err instanceof Error ? err.message : t("modal.serialFailed"));
     } finally {
       setSending(false);
     }
@@ -220,7 +224,7 @@ function DownloadRobotModalInner({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Send Program to Robot"
+      aria-label={t("modal.sendTitle")}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
@@ -230,11 +234,11 @@ function DownloadRobotModalInner({
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Send Program to Robot ({targetCount} {sourceLabel})
+            {t("modal.sendTitleCount", { n: targetCount, source: sourceLabel ?? t("modal.sourceWaypoints") })}
           </h3>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
@@ -242,11 +246,11 @@ function DownloadRobotModalInner({
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Save as a <code>.gcode</code> file or stream directly over USB Web Serial (115200 baud).
+          {t("modal.sendHintBefore")}<code>.gcode</code>{t("modal.sendHintAfter")}
         </p>
 
         <pre className="selectable mt-3 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-emerald-400 dark:border-slate-800">
-          {gcodePreview || "; No commands generated yet"}
+          {gcodePreview || `; ${t("modal.noCommands")}`}
         </pre>
 
         {serialError && (
@@ -261,7 +265,7 @@ function DownloadRobotModalInner({
             onClick={onClose}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Close
+            {t("common.close")}
           </button>
           <button
             type="button"
@@ -273,7 +277,7 @@ function DownloadRobotModalInner({
             className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-600 transition hover:bg-sky-500/20 disabled:opacity-40 dark:text-sky-400"
           >
             <Download className="h-3.5 w-3.5" />
-            Save .gcode
+            {t("modal.saveGcode")}
           </button>
           <button
             type="button"
@@ -281,13 +285,13 @@ function DownloadRobotModalInner({
             onClick={handleSerial}
             title={
               hasWebSerial
-                ? "Connect to WLKATA Mirobot via Web Serial (115200 baud)"
-                : "Web Serial API is only supported in Chromium-based browsers"
+                ? t("modal.serialTitle")
+                : t("modal.serialUnsupported")
             }
             className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:opacity-40"
           >
             <Usb className="h-3.5 w-3.5" />
-            {sending ? "Sending…" : "Stream via USB"}
+            {sending ? t("modal.sending") : t("modal.streamUsb")}
           </button>
         </div>
       </div>
@@ -320,6 +324,7 @@ function HistoryModalInner({
   onClearAll,
   onClose,
 }: Omit<HistoryModalProps, "open">) {
+  const t = useT();
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
 
   useEscapeKey(true, onClose);
@@ -337,7 +342,7 @@ function HistoryModalInner({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Work History"
+      aria-label={t("modal.history")}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
@@ -350,12 +355,12 @@ function HistoryModalInner({
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-sky-500" />
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Work History ({entries.length})
+              {t("modal.historyCount", { n: entries.length })}
             </h3>
           </div>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
@@ -366,7 +371,7 @@ function HistoryModalInner({
         {/* Action Strip */}
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-950/50">
           <span className="text-slate-500 dark:text-slate-400">
-            Auto-saved locally on every change.
+            {t("modal.autoSaved")}
           </span>
           <button
             type="button"
@@ -374,16 +379,16 @@ function HistoryModalInner({
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
           >
             <Save className="h-3.5 w-3.5" />
-            Save Snapshot
+            {t("modal.saveSnapshot")}
           </button>
         </div>
 
         {/* Unsaved Confirmation Banner */}
         {confirmRestoreId && (
           <div className="mx-5 mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
-            <p className="font-semibold">You have unsaved changes.</p>
+            <p className="font-semibold">{t("modal.unsaved")}</p>
             <p className="mt-0.5 text-[11px] opacity-90">
-              Save a snapshot before restoring, or discard current edits?
+              {t("modal.unsavedQuestion")}
             </p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               <button
@@ -396,7 +401,7 @@ function HistoryModalInner({
                 }}
                 className="rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500"
               >
-                Save &amp; Restore
+                {t("modal.saveRestore")}
               </button>
               <button
                 type="button"
@@ -407,14 +412,14 @@ function HistoryModalInner({
                 }}
                 className="rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500"
               >
-                Discard &amp; Restore
+                {t("modal.discardRestore")}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmRestoreId(null)}
                 className="rounded-lg border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
           </div>
@@ -424,7 +429,7 @@ function HistoryModalInner({
         <div className="flex-1 space-y-2 overflow-y-auto p-5">
           {entries.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-400 dark:border-slate-700">
-              No snapshots yet. Click <strong>Save Snapshot</strong> or press{" "}
+              {t("modal.noSnapshotsBefore")}<strong>{t("modal.saveSnapshot")}</strong>{t("modal.noSnapshotsMid")}{" "}
               <kbd className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[10px] text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 Ctrl+S
               </kbd>
@@ -455,10 +460,10 @@ function HistoryModalInner({
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1.5 font-mono text-[10px] text-slate-500">
                       <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-sky-600 dark:text-sky-400">
-                        {entry.data.pathTargets.length} waypoints
+                        {t("modal.nWaypoints", { n: entry.data.pathTargets.length })}
                       </span>
                       <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-purple-600 dark:text-purple-400">
-                        {entry.data.blocks.length} blocks
+                        {t("modal.nBlocks", { n: entry.data.blocks.length })}
                       </span>
                       <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400">
                         {entry.data.codeMode}
@@ -473,13 +478,13 @@ function HistoryModalInner({
                       className="inline-flex items-center gap-1 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-sky-600 transition hover:bg-sky-500/20 dark:text-sky-400"
                     >
                       <RotateCcw className="h-3 w-3" />
-                      Restore
+                      {t("modal.restore")}
                     </button>
                     <button
                       type="button"
                       onClick={() => onDelete(entry.id)}
-                      title="Delete snapshot"
-                      aria-label={`Delete snapshot ${entry.data.projectName}`}
+                      title={t("modal.deleteSnapshot")}
+                      aria-label={`${t("modal.deleteSnapshot")} ${entry.data.projectName}`}
                       className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/50"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -499,14 +504,14 @@ function HistoryModalInner({
             onClick={onClearAll}
             className="text-xs font-medium text-rose-500 transition hover:text-rose-400 disabled:opacity-40"
           >
-            Clear History
+            {t("modal.clearHistory")}
           </button>
           <button
             type="button"
             onClick={onClose}
             className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            Close
+            {t("common.close")}
           </button>
         </div>
       </div>

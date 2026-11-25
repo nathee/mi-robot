@@ -18,6 +18,7 @@ import { usePathStore } from "./usePathStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { t } from "@/lib/i18n";
 
 export type HardwareTransport = "NONE" | "SERIAL" | "WEBSOCKET";
 export type HardwareMotionMode = "SMOOTH" | "INSTANT";
@@ -516,7 +517,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       serial?: { requestPort: () => Promise<SerialPortLike> };
     };
     if (!nav.serial) {
-      const msg = "Web Serial API requires Chrome, Edge, or Opera on desktop.";
+      const msg = t("log.hw.needChromium");
       set({ lastError: msg });
       throw new Error(msg);
     }
@@ -542,7 +543,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       });
       useSerialStore.getState().appendLog({
         dir: "ok",
-        text: `Virtual Mirobot (@${get().addressFilter}) listening on USB-RS485 @ ${get().baudRate} bps`,
+        text: t("log.hw.listening", { addr: get().addressFilter, baud: get().baudRate }),
       });
 
       const reader = activeSerialReader;
@@ -564,7 +565,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
             }
           } catch (err) {
             if (get().connected) {
-              set({ lastError: err instanceof Error ? err.message : "Serial read closed" });
+              set({ lastError: err instanceof Error ? err.message : t("log.hw.readClosed") });
             }
           } finally {
             if (get().transport === "SERIAL") {
@@ -574,7 +575,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         })();
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to open serial port";
+      const msg = err instanceof Error ? err.message : t("log.hw.openFailed");
       set({ lastError: msg, connected: false, transport: "NONE" });
       throw err;
     }
@@ -601,7 +602,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
           });
           useSerialStore.getState().appendLog({
             dir: "ok",
-            text: `Connected ESP32 WebSocket: ${targetUrl}`,
+            text: t("log.hw.wsConnected", { url: targetUrl }),
           });
         };
 
@@ -625,7 +626,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
         };
       } catch (err) {
         set({
-          lastError: err instanceof Error ? err.message : "Invalid WebSocket URL",
+          lastError: err instanceof Error ? err.message : t("log.hw.badUrl"),
           connected: false,
           transport: "NONE",
         });
@@ -668,7 +669,7 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       }
     }
     if (get().connected) {
-      useSerialStore.getState().appendLog({ dir: "sys", text: "Disconnected RS-485 hardware link" });
+      useSerialStore.getState().appendLog({ dir: "sys", text: t("log.hw.disconnected") });
     }
     set({ connected: false, transport: "NONE", smoothTarget: null, controllerState: "Idle" });
   },

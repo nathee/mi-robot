@@ -4,6 +4,7 @@ import type { ToolType } from "@/lib/tools/toolDefs";
 import type { WorkcellSnapshot } from "@/lib/sim/workcell";
 import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { isRobotModelId, type RobotModelId } from "@/lib/robots";
+import { t } from "@/lib/i18n";
 
 export const AUTOSAVE_STORAGE_KEY = "mirobot:autosave:v1";
 export const HISTORY_STORAGE_KEY = "mirobot:history:v1";
@@ -165,12 +166,12 @@ export function saveHistoryToStorage(
 
 export function formatRelativeTime(ts: number): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (diffSec < 10) return "just now";
-  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 10) return t("time.justNow");
+  if (diffSec < 60) return t("time.secAgo", { n: diffSec });
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return t("time.minAgo", { n: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return t("time.hrAgo", { n: diffHr });
   const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
+  return t("time.dayAgo", { n: diffDay });
 }

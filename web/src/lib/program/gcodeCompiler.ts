@@ -9,6 +9,7 @@ import { formatWlkataCartesianMove, formatWlkataJointMove } from "@/lib/path/gco
 import type { CompileError, CompileResult, ProgramStep } from "./types";
 import { APP_NAME } from "@/lib/appConfig";
 import { DEFAULT_TOOL, interpretToolCommand, TOOL_DEFS, toolCodeFor, type ToolType } from "@/lib/tools/toolDefs";
+import { t } from "@/lib/i18n";
 
 const NUMBER_PATTERN = "[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?";
 const WORD_PATTERN = new RegExp(`([A-Z])\\s*=?\\s*(${NUMBER_PATTERN})`, "gi");
@@ -68,7 +69,7 @@ export function compileGcodeProgram(
 
     const words = extractWords(code);
     if (!words.length) {
-      errors.push({ line: lineNum, message: `Unrecognized G-code syntax: "${rawLine.trim()}"` });
+      errors.push({ line: lineNum, message: t("err.gcodeSyntax", { text: rawLine.trim() }) });
       return;
     }
 
@@ -89,7 +90,7 @@ export function compileGcodeProgram(
       const sVal = words.find((w) => w.letter === "S")?.value;
       const sec = pVal ?? sVal ?? 0.5;
       if (sec < 0 || sec > 60) {
-        errors.push({ line: lineNum, message: `G4 delay must be between 0 and 60 seconds` });
+        errors.push({ line: lineNum, message: t("err.g4Range") });
         return;
       }
       steps.push({
@@ -170,7 +171,7 @@ export function compileGcodeProgram(
     if (!space) {
       errors.push({
         line: lineNum,
-        message: "Missing M21 (Joint) or M20 (Cartesian) mode before axis coordinates",
+        message: t("err.missingMode"),
       });
       return;
     }
@@ -191,7 +192,7 @@ export function compileGcodeProgram(
         if (next[i] < lim.min - 1e-4 || next[i] > lim.max + 1e-4) {
           errors.push({
             line: lineNum,
-            message: `J${i + 1}=${next[i].toFixed(1)}° exceeds limits [${lim.min}°, ${lim.max}°]`,
+            message: t("err.jointLimits", { j: i + 1, v: next[i].toFixed(1), min: lim.min, max: lim.max }),
           });
           return;
         }
@@ -241,7 +242,7 @@ export function compileGcodeProgram(
   });
 
   if (!steps.length && !errors.length) {
-    warnings.push("Program contains no executable commands.");
+    warnings.push(t("warn.noCommandsProgram"));
   }
 
   return { steps, errors, warnings };

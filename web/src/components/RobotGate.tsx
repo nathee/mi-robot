@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useThemeStore } from "@/stores/useThemeStore";
+import { useLocaleStore } from "@/stores/useLocaleStore";
 import { RobotSelectScreen } from "./RobotSelectScreen";
 import { SimulatorShell } from "./SimulatorShell";
 
@@ -17,6 +18,7 @@ export function RobotGate() {
 
   useEffect(() => {
     useThemeStore.getState().init();
+    useLocaleStore.getState().init();
     useRobotModelStore.getState().init();
   }, []);
 

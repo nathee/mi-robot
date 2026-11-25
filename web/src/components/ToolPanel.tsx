@@ -20,7 +20,9 @@ import {
 import {
   conveyorPickPoint,
   reachStatus,
+  platformDisplayLabel,
   WORKCELL_PRESETS,
+  workcellPresetText,
   type ReachStatus,
   type WorkcellPresetId,
 } from "@/lib/sim/workcell";
@@ -28,11 +30,13 @@ import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import {
   TOOL_DEFS,
   toolCodeFor,
+  toolText,
   type ToolType,
 } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { NumericInput, ToggleSwitch } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 type ToolSubTab = "TOOL" | "WORKCELL" | "LAYOUT";
 
@@ -108,22 +112,24 @@ function NumField({
 }
 
 function ReachBadge({ status }: { status: ReachStatus }) {
+  const t = useT();
   if (status === "OK") {
     return (
       <span className="rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-        In reach
+        {t("tool.inReach")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/12 px-2 py-0.5 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
       <AlertTriangle className="h-3 w-3" />
-      {status === "TOO_FAR" ? "Too far" : "Too close"}
+      {status === "TOO_FAR" ? t("tool.tooFar") : t("tool.tooClose")}
     </span>
   );
 }
 
 export function ToolPanel() {
+  const t = useT();
   const [subTab, setSubTab] = useState<ToolSubTab>("TOOL");
 
   const toolType = useRobotStore((s) => s.toolType);
@@ -143,7 +149,6 @@ export function ToolPanel() {
   const autoFeed = useWorkcellStore((s) => s.autoFeed);
   const wc = useWorkcellStore.getState;
 
-  const def = TOOL_DEFS[toolType];
   const held = boxes.find((b) => b.held);
   const speedPercent = Math.round((runtime.speedMmS / 50) * 100);
   const moving = runtime.speedMmS !== 0 || runtime.targetMm !== null;
@@ -155,9 +160,9 @@ export function ToolPanel() {
       <div className="grid grid-cols-3 rounded-xl border border-slate-200/80 bg-slate-200/60 p-1 dark:border-slate-800 dark:bg-slate-900">
         {(
           [
-            { id: "TOOL", label: "Tool", icon: Wrench },
-            { id: "WORKCELL", label: "Workcell", icon: Box },
-            { id: "LAYOUT", label: "Layout", icon: LayoutGrid },
+            { id: "TOOL", label: t("tool.tabTool"), icon: Wrench },
+            { id: "WORKCELL", label: t("tool.tabWorkcell"), icon: Box },
+            { id: "LAYOUT", label: t("tool.tabLayout"), icon: LayoutGrid },
           ] as Array<{ id: ToolSubTab; label: string; icon: typeof Wrench }>
         ).map(({ id, label, icon: Icon }) => (
           <button
@@ -181,17 +186,17 @@ export function ToolPanel() {
         <div className="space-y-4">
           <Section
             icon={<Wrench className="h-3.5 w-3.5 text-sky-500" />}
-            title="End-Effector"
+            title={t("tool.endEffector")}
           >
             <div className="space-y-2">
-              {getActiveRobotProfile().allowedTools.map((t) => {
-                const d = TOOL_DEFS[t];
-                const active = t === toolType;
+              {getActiveRobotProfile().allowedTools.map((tool) => {
+                const d = TOOL_DEFS[tool];
+                const active = tool === toolType;
                 return (
                   <button
-                    key={t}
+                    key={tool}
                     type="button"
-                    onClick={() => setToolType(t)}
+                    onClick={() => setToolType(tool)}
                     className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left shadow-2xs transition ${
                       active
                         ? "border-sky-500/80 bg-sky-50/80 ring-1 ring-sky-500/20 dark:border-sky-500/70 dark:bg-sky-950/35"
@@ -206,11 +211,11 @@ export function ToolPanel() {
                       }`}
                       aria-hidden
                     >
-                      {TOOL_ICONS[t]}
+                      {TOOL_ICONS[tool]}
                     </span>
                     <span className="min-w-0 flex-1 space-y-1">
                       <span className="block text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        {d.label}
+                        {toolText(tool, "label")}
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-slate-500 dark:text-slate-400">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
@@ -218,10 +223,10 @@ export function ToolPanel() {
                         </span>
                         {d.maxObjectSizeMm > 0 && (
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
-                            Max {d.maxObjectSizeMm}mm
+                            {t("tool.maxSize", { mm: d.maxObjectSizeMm })}
                           </span>
                         )}
-                        {t !== "NONE" && (
+                        {tool !== "NONE" && (
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
                             {d.grabCode} / {d.releaseCode}
                           </span>
@@ -233,14 +238,14 @@ export function ToolPanel() {
               })}
             </div>
             <p className="rounded-xl border border-slate-200/70 bg-white px-3.5 py-2.5 text-xs leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-              {def.description}
+              {toolText(toolType, "description")}
             </p>
           </Section>
 
           {toolType !== "NONE" && (
             <Section
               icon={<Hand className="h-3.5 w-3.5 text-sky-500" />}
-              title="Tool Action"
+              title={t("tool.action")}
             >
               <div className={CARD}>
                 <div className="grid grid-cols-2 gap-2">
@@ -254,7 +259,7 @@ export function ToolPanel() {
                     onClick={() => setGripper("CLOSE")}
                     title={toolCodeFor(toolType, "CLOSE")}
                   >
-                    <span>{def.grabLabel}</span>
+                    <span>{toolText(toolType, "grabLabel")}</span>
                     <span className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[10px] opacity-75 dark:bg-white/10">
                       {toolCodeFor(toolType, "CLOSE")}
                     </span>
@@ -269,7 +274,7 @@ export function ToolPanel() {
                     onClick={() => setGripper("OPEN")}
                     title={toolCodeFor(toolType, "OPEN")}
                   >
-                    <span>{def.releaseLabel}</span>
+                    <span>{toolText(toolType, "releaseLabel")}</span>
                     <span className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-[10px] opacity-75 dark:bg-white/10">
                       {toolCodeFor(toolType, "OPEN")}
                     </span>
@@ -282,10 +287,10 @@ export function ToolPanel() {
                         className="h-2.5 w-2.5 rounded-xs"
                         style={{ background: held.color }}
                       />
-                      Holding {held.id}
+                      {t("tool.holding", { id: held.id })}
                     </span>
                   ) : (
-                    lastGraspMessage || "Idle — not holding an object"
+                    lastGraspMessage || t("tool.idle")
                   )}
                 </div>
               </div>
@@ -300,7 +305,7 @@ export function ToolPanel() {
           {/* Scene Presets — separated cleanly from box spawning */}
           <Section
             icon={<Sparkles className="h-3.5 w-3.5 text-sky-500" />}
-            title="Scene Presets"
+            title={t("tool.scenePresets")}
           >
             <div className="grid grid-cols-2 gap-2">
               {(Object.keys(WORKCELL_PRESETS) as WorkcellPresetId[]).map((id) => (
@@ -308,7 +313,7 @@ export function ToolPanel() {
                   key={id}
                   type="button"
                   onClick={() => wc().loadPreset(id)}
-                  title={WORKCELL_PRESETS[id].description}
+                  title={workcellPresetText(id, "description")}
                   className={`${BTN} ${
                     preset === id
                       ? "border-sky-500/80 bg-sky-50/80 font-semibold text-sky-700 ring-1 ring-sky-500/20 dark:border-sky-500/60 dark:bg-sky-950/40 dark:text-sky-300"
@@ -316,7 +321,7 @@ export function ToolPanel() {
                   }`}
                 >
                   <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{WORKCELL_PRESETS[id].label}</span>
+                  <span className="truncate">{workcellPresetText(id, "label")}</span>
                 </button>
               ))}
             </div>
@@ -325,7 +330,7 @@ export function ToolPanel() {
           {/* Boxes in Scene */}
           <Section
             icon={<Box className="h-3.5 w-3.5 text-sky-500" />}
-            title={`Boxes (${boxes.length})`}
+            title={t("tool.boxes", { n: boxes.length })}
             right={
               boxes.length > 0 && (
                 <button
@@ -334,7 +339,7 @@ export function ToolPanel() {
                   className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
                 >
                   <Trash2 className="h-3 w-3" />
-                  Clear all
+                  {t("tool.clearAll")}
                 </button>
               )
             }
@@ -347,7 +352,7 @@ export function ToolPanel() {
                   onClick={() => wc().addBox("CONVEYOR")}
                 >
                   <Plus className="h-3.5 w-3.5 text-sky-500" />
-                  On Conveyor
+                  {t("tool.onConveyor")}
                 </button>
                 <button
                   type="button"
@@ -355,7 +360,7 @@ export function ToolPanel() {
                   onClick={() => wc().addBox("TRAY")}
                 >
                   <Plus className="h-3.5 w-3.5 text-sky-500" />
-                  On Tray
+                  {t("tool.onTray")}
                 </button>
               </div>
 
@@ -377,19 +382,28 @@ export function ToolPanel() {
                         className="flex-1 truncate text-right font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400"
                         title={
                           b.held
-                            ? "Held by tool"
-                            : `Center (${b.x.toFixed(1)}, ${b.y.toFixed(1)}, ${b.z.toFixed(1)}) · Top Z ${(b.z + b.size / 2).toFixed(1)} mm`
+                            ? t("tool.heldByTool")
+                            : t("tool.boxCenterTitle", {
+                                x: b.x.toFixed(1),
+                                y: b.y.toFixed(1),
+                                z: b.z.toFixed(1),
+                                top: (b.z + b.size / 2).toFixed(1),
+                              })
                         }
                       >
                         {b.held
-                          ? "Held by tool"
-                          : `${b.x.toFixed(0)}, ${b.y.toFixed(0)} · top ${(b.z + b.size / 2).toFixed(0)} mm`}
+                          ? t("tool.heldByTool")
+                          : t("tool.boxSummary", {
+                              x: b.x.toFixed(0),
+                              y: b.y.toFixed(0),
+                              top: (b.z + b.size / 2).toFixed(0),
+                            })}
                       </span>
                       <button
                         type="button"
                         onClick={() => wc().removeBox(b.id)}
                         className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/50"
-                        aria-label={`Remove ${b.id}`}
+                        aria-label={t("tool.remove", { name: b.id })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -398,7 +412,7 @@ export function ToolPanel() {
                 </ul>
               ) : (
                 <div className="mt-3 rounded-lg border border-dashed border-slate-200 py-3 text-center text-xs text-slate-400 dark:border-slate-800">
-                  No boxes in scene
+                  {t("tool.noBoxes")}
                 </div>
               )}
             </div>
@@ -407,7 +421,7 @@ export function ToolPanel() {
           {/* Conveyor Belt */}
           <Section
             icon={<Play className="h-3.5 w-3.5 text-sky-500" />}
-            title="Conveyor Belt"
+            title={t("tool.conveyor")}
             right={
               <span
                 className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold ${
@@ -416,14 +430,14 @@ export function ToolPanel() {
                     : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                 }`}
               >
-                {moving ? "Running" : "Stopped"}
+                {moving ? t("common.running") : t("tool.stopped")}
               </span>
             }
           >
             <div className={`${CARD} space-y-3`}>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 dark:text-slate-400">
-                  Position{" "}
+                  {t("tool.position")}{" "}
                   <strong className="font-mono tabular-nums text-slate-800 dark:text-slate-100">
                     D={runtime.positionMm.toFixed(0)} mm
                   </strong>
@@ -442,7 +456,7 @@ export function ToolPanel() {
                   value={speedPercent}
                   onChange={(e) => wc().setConveyorSpeedPercent(Number(e.target.value))}
                   className="sim-slider w-full"
-                  aria-label="Conveyor speed"
+                  aria-label={t("tool.conveyorSpeed")}
                 />
                 <div className="mt-0.5 flex justify-between font-mono text-[10px] text-slate-400">
                   <span>−100%</span>
@@ -457,28 +471,28 @@ export function ToolPanel() {
                   type="button"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 py-2 text-xs font-medium text-slate-700 transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
                   onClick={() => wc().setConveyorSpeedPercent(-60)}
-                  title="Run toward robot (G6 F-60)"
+                  title={t("tool.revTitle")}
                 >
                   <Play className="h-3.5 w-3.5 rotate-180" />
-                  Rev
+                  {t("tool.rev")}
                 </button>
                 <button
                   type="button"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:opacity-40 dark:text-rose-400"
                   onClick={() => wc().stopConveyor()}
                   disabled={!moving}
-                  title="Stop belt (G6 F0)"
+                  title={t("tool.stopTitle")}
                 >
                   <Pause className="h-3.5 w-3.5" />
-                  Stop
+                  {t("path.stop")}
                 </button>
                 <button
                   type="button"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 py-2 text-xs font-medium text-slate-700 transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
                   onClick={() => wc().setConveyorSpeedPercent(60)}
-                  title="Run away from robot (G6 F60)"
+                  title={t("tool.fwdTitle")}
                 >
-                  Fwd
+                  {t("tool.fwd")}
                   <Play className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -489,18 +503,18 @@ export function ToolPanel() {
                   type="button"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   onClick={() => wc().moveConveyor(-50, false)}
-                  title="Jog -50mm toward end stop (G91 G01 D-50)"
+                  title={t("tool.jogBackTitle")}
                 >
                   <SkipBack className="h-3.5 w-3.5" />
-                  Jog −50 mm
+                  {t("tool.jogBack")}
                 </button>
                 <button
                   type="button"
                   className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                   onClick={() => wc().moveConveyor(50, false)}
-                  title="Jog +50mm away (G91 G01 D50)"
+                  title={t("tool.jogFwdTitle")}
                 >
-                  Jog +50 mm
+                  {t("tool.jogFwd")}
                   <SkipForward className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -510,20 +524,20 @@ export function ToolPanel() {
           {/* Light Sensor & Auto Feed */}
           <Section
             icon={<ScanLine className="h-3.5 w-3.5 text-sky-500" />}
-            title="Light Sensor & Auto Feed"
+            title={t("tool.sensorSection")}
           >
             <div className={CARD}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                    Enable Light Sensor
+                    {t("tool.enableSensor")}
                   </div>
                   <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                    Detect boxes &amp; stop belt automatically
+                    {t("tool.enableSensorHint")}
                   </div>
                 </div>
                 <ToggleSwitch
-                  aria-label="Enable light sensor"
+                  aria-label={t("tool.enableSensor")}
                   checked={sensor.enabled}
                   onChange={(checked) => wc().setSensorEnabled(checked)}
                 />
@@ -531,7 +545,7 @@ export function ToolPanel() {
 
               {!sensor.enabled ? (
                 <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
-                  Sensor disabled. Belt moves only by manual or program command.
+                  {t("tool.sensorDisabled")}
                 </p>
               ) : (
                 <div className="mt-3.5 space-y-3 border-t border-slate-100 pt-3.5 dark:border-slate-800">
@@ -544,7 +558,7 @@ export function ToolPanel() {
                             : "bg-emerald-500"
                         }`}
                       />
-                      {sensorBlocked ? "Box detected" : "Beam clear"}
+                      {sensorBlocked ? t("tool.boxDetected") : t("tool.beamClear")}
                     </span>
                     <span className="font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
                       SENSOR={sensorBlocked ? 1 : 0} · #{sensorCount}
@@ -553,13 +567,13 @@ export function ToolPanel() {
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <NumField
-                      label="Beam offset (mm)"
+                      label={t("tool.beamOffset")}
                       value={sensor.offsetMm}
                       step={5}
                       onChange={(v) => wc().setSensorOffset(v)}
                     />
                     <NumField
-                      label="Auto speed (%)"
+                      label={t("tool.autoSpeed")}
                       value={autoFeed.speedPercent}
                       step={5}
                       min={5}
@@ -582,7 +596,7 @@ export function ToolPanel() {
                     ) : (
                       <Play className="h-3.5 w-3.5" />
                     )}
-                    {autoFeed.enabled ? "Auto Feed Running — Stop" : "Start Auto Feed"}
+                    {autoFeed.enabled ? t("tool.autoFeedStop") : t("tool.autoFeedStart")}
                   </button>
                 </div>
               )}
@@ -598,7 +612,7 @@ export function ToolPanel() {
           <div className={`${CARD} space-y-3`}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                Conveyor Geometry
+                {t("tool.conveyorGeometry")}
               </span>
               <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-950">
                 {(["x", "y"] as const).map((ax) => (
@@ -612,7 +626,7 @@ export function ToolPanel() {
                         : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                     }`}
                   >
-                    Axis {ax.toUpperCase()}
+                    {t("tool.axis", { axis: ax.toUpperCase() })}
                   </button>
                 ))}
               </div>
@@ -620,17 +634,17 @@ export function ToolPanel() {
 
             <div className="grid grid-cols-3 gap-2">
               <NumField
-                label="Center X (mm)"
+                label={t("tool.centerX")}
                 value={conveyor.x}
                 onChange={(v) => wc().updateConveyorLayout({ x: v })}
               />
               <NumField
-                label="Center Y (mm)"
+                label={t("tool.centerY")}
                 value={conveyor.y}
                 onChange={(v) => wc().updateConveyorLayout({ y: v })}
               />
               <NumField
-                label="Height Z (mm)"
+                label={t("tool.heightZ")}
                 value={conveyor.topZ}
                 step={5}
                 onChange={(v) => wc().updateConveyorLayout({ topZ: v })}
@@ -639,12 +653,12 @@ export function ToolPanel() {
 
             <div className="grid grid-cols-2 gap-2">
               <NumField
-                label="Length (mm)"
+                label={t("tool.length")}
                 value={conveyor.lengthMm}
                 onChange={(v) => wc().updateConveyorLayout({ lengthMm: v })}
               />
               <NumField
-                label="Width (mm)"
+                label={t("tool.width")}
                 value={conveyor.widthMm}
                 step={5}
                 onChange={(v) => wc().updateConveyorLayout({ widthMm: v })}
@@ -653,7 +667,7 @@ export function ToolPanel() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 font-mono text-[11px] tabular-nums text-slate-500 dark:border-slate-800 dark:text-slate-400">
               <span>
-                Pick ({pick.x.toFixed(0)}, {pick.y.toFixed(0)}, {(pick.z + 12.5).toFixed(0)})
+                {t("tool.pickPoint", { x: pick.x.toFixed(0), y: pick.y.toFixed(0), z: (pick.z + 12.5).toFixed(0) })}
               </span>
               <ReachBadge status={reachStatus(pick.x, pick.y)} />
             </div>
@@ -668,7 +682,7 @@ export function ToolPanel() {
                     className="h-3 w-3 rounded-xs shadow-2xs"
                     style={{ background: p.color }}
                   />
-                  {p.label}
+                  {platformDisplayLabel(p.label)}
                 </span>
                 <div className="flex items-center gap-2">
                   <ReachBadge status={reachStatus(p.x, p.y)} />
@@ -676,7 +690,7 @@ export function ToolPanel() {
                     type="button"
                     onClick={() => wc().removePlatform(p.id)}
                     className="rounded-md p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/50"
-                    aria-label={`Remove ${p.label}`}
+                    aria-label={t("tool.remove", { name: platformDisplayLabel(p.label) })}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -685,17 +699,17 @@ export function ToolPanel() {
 
               <div className="grid grid-cols-3 gap-2">
                 <NumField
-                  label="Center X (mm)"
+                  label={t("tool.centerX")}
                   value={p.x}
                   onChange={(v) => wc().updatePlatform(p.id, { x: v })}
                 />
                 <NumField
-                  label="Center Y (mm)"
+                  label={t("tool.centerY")}
                   value={p.y}
                   onChange={(v) => wc().updatePlatform(p.id, { y: v })}
                 />
                 <NumField
-                  label="Height Z (mm)"
+                  label={t("tool.heightZ")}
                   value={p.topZ}
                   step={5}
                   onChange={(v) => wc().updatePlatform(p.id, { topZ: v })}
@@ -704,12 +718,12 @@ export function ToolPanel() {
 
               <div className="grid grid-cols-2 gap-2">
                 <NumField
-                  label="Size X (mm)"
+                  label={t("tool.sizeX")}
                   value={p.sizeX}
                   onChange={(v) => wc().updatePlatform(p.id, { sizeX: v })}
                 />
                 <NumField
-                  label="Size Y (mm)"
+                  label={t("tool.sizeY")}
                   value={p.sizeY}
                   onChange={(v) => wc().updatePlatform(p.id, { sizeY: v })}
                 />
@@ -723,14 +737,14 @@ export function ToolPanel() {
               className={BTN}
               onClick={() => wc().addPlatform()}
             >
-              <Plus className="h-3.5 w-3.5 text-sky-500" /> Add Tray
+              <Plus className="h-3.5 w-3.5 text-sky-500" /> {t("tool.addTray")}
             </button>
             <button
               type="button"
               className={BTN}
               onClick={() => wc().resetLayout()}
             >
-              <RotateCcw className="h-3.5 w-3.5" /> Reset Layout
+              <RotateCcw className="h-3.5 w-3.5" /> {t("tool.resetLayout")}
             </button>
           </div>
         </div>

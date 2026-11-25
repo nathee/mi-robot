@@ -19,11 +19,12 @@ import {
   type ViewAxisKey,
   type ViewGizmoProjection,
 } from "@/lib/viewer/MirobotSceneEngine";
-import { TOOL_DEFS, toolCodeFor } from "@/lib/tools/toolDefs";
+import { toolCodeFor, toolText } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useViewerStore, type FrameAxesVisibility } from "@/stores/useViewerStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { ToggleSwitch, useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 const AXIS_BADGE_COLORS: Record<"x" | "y" | "z", { pos: string; neg: string }> = {
   x: {
@@ -41,6 +42,7 @@ const AXIS_BADGE_COLORS: Record<"x" | "y" | "z", { pos: string; neg: string }> =
 };
 
 export function ViewerCanvas() {
+  const t = useT();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<MirobotSceneEngine | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -60,7 +62,6 @@ export function ViewerCanvas() {
   const gripperState = useRobotStore((s) => s.gripperState);
   const setGripper = useRobotStore((s) => s.setGripper);
   const toolType = useRobotStore((s) => s.toolType);
-  const toolDef = TOOL_DEFS[toolType];
 
   useEscapeKey(openPopover !== null, () => setOpenPopover(null));
 
@@ -111,7 +112,7 @@ export function ViewerCanvas() {
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/45 backdrop-blur-xs">
           <div className="flex items-center gap-2.5 rounded-xl border border-slate-700/80 bg-slate-900/90 px-4 py-2.5 text-xs font-medium text-slate-200 shadow-lg">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-400 border-t-transparent" />
-            Loading 6-DOF Mirobot 3D models…
+            {t("viewer.loading")}
           </div>
         </div>
       )}
@@ -125,7 +126,7 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => viewer.setControlMode("JOINT")}
-            title="Control individual joints J1–J6"
+            title={t("viewer.jointTitle")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
               activeControlMode === "JOINT"
                 ? "bg-sky-600 text-white shadow-xs"
@@ -133,12 +134,12 @@ export function ViewerCanvas() {
             }`}
           >
             <Hand className="h-3.5 w-3.5" />
-            <span>Joint</span>
+            <span>{t("viewer.joint")}</span>
           </button>
           <button
             type="button"
             onClick={() => viewer.setControlMode("IK_MOVE")}
-            title="Drag TCP arrow gizmo in 3D space (IK Move)"
+            title={t("viewer.moveTitle")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
               activeControlMode === "IK_MOVE"
                 ? "bg-sky-600 text-white shadow-xs"
@@ -146,12 +147,12 @@ export function ViewerCanvas() {
             }`}
           >
             <Move className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Move</span>
+            <span className="hidden sm:inline">{t("viewer.move")}</span>
           </button>
           <button
             type="button"
             onClick={() => viewer.setControlMode("IK_ROTATE")}
-            title="Rotate TCP orientation gizmo in 3D space (IK Rotate)"
+            title={t("viewer.rotateTitle")}
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
               activeControlMode === "IK_ROTATE"
                 ? "bg-sky-600 text-white shadow-xs"
@@ -159,7 +160,7 @@ export function ViewerCanvas() {
             }`}
           >
             <RotateCw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Rotate</span>
+            <span className="hidden sm:inline">{t("viewer.rotate")}</span>
           </button>
         </div>
 
@@ -170,16 +171,16 @@ export function ViewerCanvas() {
               IK
             </span>
             <select
-              aria-label="IK Solver"
+              aria-label={t("viewer.ikSolver")}
               value={viewer.ikSolver}
               onChange={(e) => viewer.setField("ikSolver", e.target.value as IkSolverType)}
               className="rounded bg-transparent text-xs font-semibold text-slate-800 outline-none dark:text-slate-100"
             >
               <option value="CONSTRAINED" className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-                Constrained
+                {t("viewer.constrained")}
               </option>
               <option value="ANALYTIC" className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-                Analytic
+                {t("viewer.analytic")}
               </option>
               <option value="DLS" className="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100">
                 DLS
@@ -193,7 +194,7 @@ export function ViewerCanvas() {
                 onChange={(e) => viewer.setField("ikAutoApply", e.target.checked)}
                 className="h-3.5 w-3.5 rounded accent-sky-500"
               />
-              Auto
+              {t("path.auto")}
             </label>
           </div>
         )}
@@ -208,8 +209,8 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => engineRef.current?.zoomIn()}
-            title="Zoom In"
-            aria-label="Zoom In"
+            title={t("viewer.zoomIn")}
+            aria-label={t("viewer.zoomIn")}
             className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <ZoomIn className="h-4 w-4" />
@@ -217,8 +218,8 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => engineRef.current?.zoomOut()}
-            title="Zoom Out"
-            aria-label="Zoom Out"
+            title={t("viewer.zoomOut")}
+            aria-label={t("viewer.zoomOut")}
             className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <ZoomOut className="h-4 w-4" />
@@ -226,8 +227,8 @@ export function ViewerCanvas() {
           <button
             type="button"
             onClick={() => engineRef.current?.resetCamera()}
-            title="Reset Camera View"
-            aria-label="Reset Camera View"
+            title={t("viewer.resetCamera")}
+            aria-label={t("viewer.resetCamera")}
             className="rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-100/80 dark:text-slate-300 dark:hover:bg-slate-800/80"
           >
             <RotateCcw className="h-4 w-4" />
@@ -240,8 +241,8 @@ export function ViewerCanvas() {
             <button
               type="button"
               onClick={() => setOpenPopover((p) => (p === "light" ? null : "light"))}
-              title="Scene brightness"
-              aria-label="Scene brightness"
+              title={t("viewer.brightness")}
+              aria-label={t("viewer.brightness")}
               aria-expanded={openPopover === "light"}
               className={`rounded-lg p-1.5 transition ${
                 openPopover === "light"
@@ -255,14 +256,14 @@ export function ViewerCanvas() {
             {openPopover === "light" && (
               <div className="animate-ui-in absolute right-0 mt-2.5 w-64 rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-xl dark:border-slate-700/80 dark:bg-slate-900">
                 <div className="mb-2.5 flex items-center justify-between font-semibold text-slate-700 dark:text-slate-200">
-                  <span>Scene Brightness</span>
+                  <span>{t("viewer.brightnessTitle")}</span>
                   <span className="font-mono text-xs tabular-nums text-sky-600 dark:text-sky-400">
                     {brightnessPct}%
                   </span>
                 </div>
                 <input
                   type="range"
-                  aria-label="Scene brightness"
+                  aria-label={t("viewer.brightness")}
                   min={0.5}
                   max={5}
                   step={0.05}
@@ -279,7 +280,7 @@ export function ViewerCanvas() {
             <button
               type="button"
               onClick={() => setOpenPopover((p) => (p === "layers" ? null : "layers"))}
-              title="Show or hide 3D layers"
+              title={t("viewer.layersTitle")}
               aria-expanded={openPopover === "layers"}
               className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                 openPopover === "layers"
@@ -288,7 +289,7 @@ export function ViewerCanvas() {
               }`}
             >
               <Layers className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Layers</span>
+              <span className="hidden sm:inline">{t("viewer.layers")}</span>
             </button>
 
             {openPopover === "layers" && (
@@ -297,21 +298,21 @@ export function ViewerCanvas() {
                   {/* Group 1: Environment */}
                   <div>
                     <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      Environment
+                      {t("viewer.environment")}
                     </div>
                     <div className="space-y-2.5">
                       {(
                         [
-                          ["showWorkcell", "Workcell & Conveyor"],
-                          ["showWorkspace", "Reach Envelope"],
-                          ["showGrid", "Floor Grid (XY)"],
-                          ["showZGrid", "Vertical Grid (Z)"],
+                          ["showWorkcell", "layers.workcell"],
+                          ["showWorkspace", "layers.reach"],
+                          ["showGrid", "layers.grid"],
+                          ["showZGrid", "layers.zgrid"],
                         ] as const
                       ).map(([key, label]) => (
                         <div key={key} className="flex items-center justify-between gap-3">
-                          <span className="text-slate-700 dark:text-slate-300">{label}</span>
+                          <span className="text-slate-700 dark:text-slate-300">{t(label)}</span>
                           <ToggleSwitch
-                            aria-label={label}
+                            aria-label={t(label)}
                             checked={Boolean(viewer[key])}
                             onChange={(checked) => viewer.setField(key, checked)}
                           />
@@ -323,22 +324,22 @@ export function ViewerCanvas() {
                   {/* Group 2: Robot & Path */}
                   <div className="border-t border-slate-100 pt-3.5 dark:border-slate-800">
                     <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      Robot &amp; Path
+                      {t("viewer.robotPath")}
                     </div>
                     <div className="space-y-2.5">
                       {(
                         [
-                          ["showTcpFrame", "TCP Axes"],
-                          ["showTcpValue", "3D TCP Coordinates"],
-                          ["showPath", "Path Trajectory"],
-                          ["showPoints", "Waypoint Markers"],
-                          ["showLabels", "3D Labels"],
+                          ["showTcpFrame", "layers.tcpAxes"],
+                          ["showTcpValue", "layers.tcpValue"],
+                          ["showPath", "layers.path"],
+                          ["showPoints", "layers.points"],
+                          ["showLabels", "layers.labels"],
                         ] as const
                       ).map(([key, label]) => (
                         <div key={key} className="flex items-center justify-between gap-3">
-                          <span className="text-slate-700 dark:text-slate-300">{label}</span>
+                          <span className="text-slate-700 dark:text-slate-300">{t(label)}</span>
                           <ToggleSwitch
-                            aria-label={label}
+                            aria-label={t(label)}
                             checked={Boolean(viewer[key])}
                             onChange={(checked) => viewer.setField(key, checked)}
                           />
@@ -354,7 +355,7 @@ export function ViewerCanvas() {
                       onClick={() => setShowAdvancedLayers((v) => !v)}
                       className="flex w-full items-center justify-between py-0.5 text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                     >
-                      <span>Frames &amp; Gizmo Tuning</span>
+                      <span>{t("viewer.framesTuning")}</span>
                       {showAdvancedLayers ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
@@ -367,15 +368,15 @@ export function ViewerCanvas() {
                         <div className="space-y-2.5">
                           {(
                             [
-                              ["showWorldFrame", "Ground Frame (F0)"],
-                              ["showLinkFrames", "Link Frames (F1–F6)"],
-                              ["showPointFrames", "Waypoint Frames"],
+                              ["showWorldFrame", "layers.worldFrame"],
+                              ["showLinkFrames", "layers.linkFrames"],
+                              ["showPointFrames", "layers.pointFrames"],
                             ] as const
                           ).map(([key, label]) => (
                             <div key={key} className="flex items-center justify-between gap-3">
-                              <span className="text-slate-600 dark:text-slate-300">{label}</span>
+                              <span className="text-slate-600 dark:text-slate-300">{t(label)}</span>
                               <ToggleSwitch
-                                aria-label={label}
+                                aria-label={t(label)}
                                 checked={Boolean(viewer[key])}
                                 onChange={(checked) => viewer.setField(key, checked)}
                               />
@@ -406,7 +407,7 @@ export function ViewerCanvas() {
 
                         <div>
                           <div className="mb-1.5 text-[10px] font-medium text-slate-400">
-                            Visible Axes
+                            {t("viewer.visibleAxes")}
                           </div>
                           <div className="grid grid-cols-3 gap-1.5">
                             {(
@@ -439,10 +440,10 @@ export function ViewerCanvas() {
 
                         <div className="space-y-2 pt-0.5">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-slate-500">Drag Scale</span>
+                            <span className="text-[11px] text-slate-500">{t("viewer.dragScale")}</span>
                             <input
                               type="range"
-                              aria-label="Drag scale"
+                              aria-label={t("viewer.dragScale")}
                               min={0.05}
                               max={1}
                               step={0.05}
@@ -452,10 +453,10 @@ export function ViewerCanvas() {
                             />
                           </div>
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-slate-500">Frame Size</span>
+                            <span className="text-[11px] text-slate-500">{t("viewer.frameSize")}</span>
                             <input
                               type="range"
-                              aria-label="Frame size"
+                              aria-label={t("viewer.frameSize")}
                               min={0.03}
                               max={0.16}
                               step={0.01}
@@ -482,7 +483,7 @@ export function ViewerCanvas() {
       >
         {collision && (
           <div className="animate-ui-in rounded-xl border border-rose-500/50 bg-rose-950/90 px-3 py-1.5 text-xs font-medium text-rose-100 shadow-md backdrop-blur-sm">
-            Collision: {collision}
+            {t("viewer.collision", { what: collision })}
           </div>
         )}
         {workspaceStatus.out && (
@@ -510,7 +511,11 @@ export function ViewerCanvas() {
               <button
                 type="button"
                 onClick={() => setGripper(gripperState === "OPEN" ? "CLOSE" : "OPEN")}
-                title={`${toolDef.label}: click to ${gripperState === "OPEN" ? toolDef.grabLabel.toLowerCase() : toolDef.releaseLabel.toLowerCase()} (${toolCodeFor(toolType, gripperState === "OPEN" ? "CLOSE" : "OPEN")})`}
+                title={t("viewer.gripperTitle", {
+                  tool: toolText(toolType, "label"),
+                  action: toolText(toolType, gripperState === "OPEN" ? "grabLabel" : "releaseLabel"),
+                  code: toolCodeFor(toolType, gripperState === "OPEN" ? "CLOSE" : "OPEN"),
+                })}
                 className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 font-sans text-[11px] font-semibold transition ${
                   gripperState === "CLOSE"
                     ? "bg-amber-500/20 text-amber-700 hover:bg-amber-500/30 dark:text-amber-300"
@@ -522,8 +527,8 @@ export function ViewerCanvas() {
                     gripperState === "CLOSE" ? "bg-amber-500" : "bg-emerald-500"
                   }`}
                 />
-                {toolDef.shortLabel}:{" "}
-                {gripperState === "CLOSE" ? toolDef.grabLabel : toolDef.releaseLabel}
+                {toolText(toolType, "shortLabel")}:{" "}
+                {toolText(toolType, gripperState === "CLOSE" ? "grabLabel" : "releaseLabel")}
               </button>
             </>
           )}
@@ -532,7 +537,7 @@ export function ViewerCanvas() {
 
       {/* Bottom-Right: Theme-aware Interactive 3D View Gizmo */}
       <div
-        aria-label="Camera view gizmo"
+        aria-label={t("viewer.viewGizmo")}
         onPointerDown={(e) => {
           e.stopPropagation();
           gizmoDragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
@@ -583,7 +588,7 @@ export function ViewerCanvas() {
               <button
                 key={a.key}
                 type="button"
-                title={`Snap camera to ${a.label}`}
+                title={t("viewer.snapTo", { axis: a.label })}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => engineRef.current?.setViewAxis(a.key as ViewAxisKey)}
                 style={{

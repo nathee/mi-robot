@@ -1,5 +1,6 @@
 import type { JointLimit, MdhParam, WorkspaceConfig } from "@/lib/kinematics/constants";
 import type { ToolType } from "@/lib/tools/toolDefs";
+import type { ConveyorConfig, Platform } from "@/lib/sim/workcell";
 
 export type RobotModelId = "mirobot" | "xarm2";
 
@@ -56,5 +57,15 @@ export interface RobotProfile {
   busServos?: {
     joints: readonly BusServoJointMap[];
     gripper: BusServoGripperMap;
+  };
+  /**
+   * Default conveyor / tray layout and the horizontal reach used for the "In reach" badges.
+   * Omit to use the generic layout in lib/sim/workcell.ts (sized for the Mirobot).
+   */
+  workcell?: {
+    conveyor: ConveyorConfig;
+    platforms: readonly Platform[];
+    reachMinMm: number;
+    reachMaxMm: number;
   };
 }

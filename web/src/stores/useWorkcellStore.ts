@@ -12,8 +12,8 @@ import {
   applyConveyorLayout,
   applyPlatformLayout,
   BOX_COLORS,
-  DEFAULT_CONVEYOR,
-  DEFAULT_PLATFORMS,
+  defaultConveyor,
+  defaultPlatforms,
   PLATFORM_COLORS,
   type ConveyorConfig,
   type Platform,
@@ -41,9 +41,11 @@ import {
   type WorkcellPresetId,
   type WorkcellSnapshot,
 } from "@/lib/sim/workcell";
-import { TOOL_DEFS } from "@/lib/tools/toolDefs";
+import { TOOL_DEFS, toolText } from "@/lib/tools/toolDefs";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
+import { t } from "@/lib/i18n";
+import { workcellPresetText } from "@/lib/sim/workcell";
 
 interface WorkcellState extends WorkcellSnapshot {
   sensor: LightSensorConfig;
@@ -114,7 +116,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   loadPreset(id) {
     const snap = buildPreset(id);
     set({ ...snap, autoFeed: { ...get().autoFeed, enabled: false }, preset: id, nextBoxNum: snap.boxes.length + 1, lastGraspMessage: "" });
-    log(`Workcell preset loaded: ${id}`);
+    log(t("log.wc.preset", { name: workcellPresetText(id, "label") }));
   },
 
   addBox(where, size = DEFAULT_BOX_SIZE) {
@@ -127,7 +129,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       // Never stack a new box on one still waiting at the feed point: use the next free spot.
       const p = findFreeBeltSpot(s.conveyor, s.boxes, size, dir);
       if (!p) {
-        log("Conveyor is full at the feed end: move the belt before adding another box", "error");
+        log(t("log.wc.conveyorFull"), "error");
         return;
       }
       x = p.x;
@@ -192,18 +194,20 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
 
   resetLayout() {
     const s = get();
-    let boxes = applyConveyorLayout(s.conveyor, s.boxes, DEFAULT_CONVEYOR).boxes;
+    const defConveyor = defaultConveyor();
+    const defPlatforms = defaultPlatforms();
+    let boxes = applyConveyorLayout(s.conveyor, s.boxes, defConveyor).boxes;
     let platforms = s.platforms;
-    const def = DEFAULT_PLATFORMS[0];
+    const def = defPlatforms[0];
     const first = platforms[0];
     if (first) {
       const res = applyPlatformLayout(first, boxes, { ...def, id: first.id });
       boxes = res.boxes;
       platforms = [res.platform];
     } else {
-      platforms = DEFAULT_PLATFORMS.map((p) => ({ ...p }));
+      platforms = defPlatforms;
     }
-    const conveyor = { ...DEFAULT_CONVEYOR };
+    const conveyor = defConveyor;
     set({ conveyor, platforms, boxes: settleBoxes(boxes, platforms, conveyor) });
   },
 
@@ -214,7 +218,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
   clearBoxes() {
     const n = get().boxes.length;
     set({ boxes: [], nextBoxNum: 1 });
-    log(`Cleared ${n} box${n === 1 ? "" : "es"}`);
+    log(t(n === 1 ? "log.wc.clearedOne" : "log.wc.clearedMany", { n }));
   },
 
   setSensorOffset(offsetMm) {
@@ -226,13 +230,13 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     if (s.sensor.enabled === enabled) return;
     if (!enabled && s.autoFeed.enabled) s.setAutoFeed(false);
     set({ sensor: { ...s.sensor, enabled } });
-    log(enabled ? "Light sensor installed on the conveyor" : "Light sensor removed (conveyor runs without sensor)");
+    log(enabled ? t("log.wc.sensorOn") : t("log.wc.sensorOff"));
   },
 
   setAutoFeed(enabled, speedPercent) {
     const s = get();
     if (enabled && !s.sensor.enabled) {
-      log("Auto feed needs the light sensor: enable it in Tools → Light Sensor", "error");
+      log(t("log.wc.autoNeedsSensor"), "error");
       return;
     }
     const autoFeed = {
@@ -244,7 +248,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       conveyorRuntime: { ...s.conveyorRuntime, targetMm: null, speedMmS: enabled ? s.conveyorRuntime.speedMmS : 0 },
     });
     if (enabled !== s.autoFeed.enabled) {
-      log(enabled ? `Conveyor auto-feed ON (${autoFeed.speedPercent}%, stops at the light sensor)` : "Conveyor auto-feed OFF");
+      log(enabled ? t("log.wc.autoOn", { n: autoFeed.speedPercent }) : t("log.wc.autoOff"));
     }
   },
 
@@ -306,8 +310,8 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       if ("box" in res) {
         boxes = graspBox(boxes, res.box.id, tcp);
         changed = true;
-        set({ lastGraspMessage: `Holding ${res.box.id}` });
-        log(`${TOOL_DEFS.SUCTION.label}: picked ${res.box.id}`);
+        set({ lastGraspMessage: t("tool.holding", { id: res.box.id }) });
+        log(t("log.wc.picked", { tool: toolText("SUCTION", "label"), id: res.box.id }));
       }
     }
     // Contact: the tool tip and any box it carries shove resting boxes they run into.
@@ -328,7 +332,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       changed = true;
       const key = push.pushed.join(",");
       const now = Date.now();
-      if (key !== lastPushKey || now - lastPushLogAt > 2000) log(`Pushed ${push.pushed.join(", ")}`);
+      if (key !== lastPushKey || now - lastPushLogAt > 2000) log(t("log.wc.pushed", { ids: push.pushed.join(", ") }));
       lastPushKey = key;
       lastPushLogAt = now;
       for (const e of push.events) {
@@ -348,7 +352,7 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     const blocked = isSensorBlocked(s.conveyor, s.sensor, boxes);
     if (blocked !== s.sensorBlocked) {
       set({ sensorBlocked: blocked, sensorCount: s.sensorCount + (blocked ? 1 : 0) });
-      log(blocked ? "Light sensor: box detected" : "Light sensor: clear");
+      log(blocked ? t("log.wc.sensorBlocked") : t("log.wc.sensorClear"));
     }
     if (changed) set({ boxes, conveyorRuntime: runtime });
 
@@ -358,21 +362,23 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       : findToolCollision(tcp, TOOL_DEFS[robot.toolType], boxes, s.platforms, s.conveyor);
     if (collision !== s.collision) {
       set({ collision });
-      if (collision) log(`Collision: ${collision}`, "error");
+      if (collision) log(t("viewer.collision", { what: collision }), "error");
     }
   },
 
   grab() {
     const s = get();
-    const tool = TOOL_DEFS[useRobotStore.getState().toolType];
+    const toolType = useRobotStore.getState().toolType;
+    const tool = TOOL_DEFS[toolType];
+    const toolLabel = toolText(toolType, "label");
     const tcp = currentTcpPoseMm();
     const res = findGraspTarget(s.boxes, tcp, tool);
     if ("box" in res) {
-      set({ boxes: graspBox(s.boxes, res.box.id, tcp), lastGraspMessage: `Holding ${res.box.id}` });
-      log(`${tool.label}: picked ${res.box.id}`);
+      set({ boxes: graspBox(s.boxes, res.box.id, tcp), lastGraspMessage: t("tool.holding", { id: res.box.id }) });
+      log(t("log.wc.picked", { tool: toolLabel, id: res.box.id }));
       return true;
     }
-    let nothingMsg = "No box within reach of the TCP";
+    let nothingMsg = t("log.wc.noBoxInReach");
     if (res.reason === "NOTHING_IN_REACH" && s.boxes.length > 0) {
       let nearest = s.boxes[0];
       let bestDist = Infinity;
@@ -387,19 +393,19 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
       if (nearest && !nearest.held) {
         const dxy = Math.hypot(nearest.x - tcp.x, nearest.y - tcp.y);
         const dz = tcp.z - (nearest.z + nearest.size / 2);
-        const dzText = `${dz >= 0 ? "+" : ""}${dz.toFixed(0)}mm vs top`;
-        nothingMsg = `No box in reach (nearest ${nearest.id}: XY ${dxy.toFixed(0)}mm, Z ${dzText})`;
+        const dzText = t("log.wc.dzVsTop", { dz: `${dz >= 0 ? "+" : ""}${dz.toFixed(0)}` });
+        nothingMsg = t("log.wc.noBoxNearest", { id: nearest.id, xy: dxy.toFixed(0), z: dzText });
       }
     }
     const messages: Record<typeof res.reason, string> = {
-      NO_TOOL: "No end-effector mounted",
+      NO_TOOL: t("log.wc.noTool"),
       NOTHING_IN_REACH: nothingMsg,
-      TOO_LARGE: `Box is too large for the ${tool.label}`,
-      ALREADY_HOLDING: "Already holding a box",
+      TOO_LARGE: t("log.wc.tooLarge", { tool: toolLabel }),
+      ALREADY_HOLDING: t("log.wc.alreadyHolding"),
     };
     set({ lastGraspMessage: messages[res.reason] });
     if (res.reason !== "ALREADY_HOLDING" && res.reason !== "NO_TOOL") {
-      log(`${tool.label}: ${messages[res.reason]}`);
+      log(`${toolLabel}: ${messages[res.reason]}`);
     }
     return false;
   },
@@ -410,8 +416,8 @@ export const useWorkcellStore = create<WorkcellState>((set, get) => ({
     const { boxes, events } = releaseBoxesDetailed(s.boxes, s.platforms, s.conveyor);
     set({ boxes, lastGraspMessage: "", collision: null });
     for (const e of events) {
-      if (e.toppledOff) log(`Released ${e.boxId}: toppled off ${e.toppledOff} onto ${e.restsOn}`, "error");
-      else log(`Released ${e.boxId} onto ${e.restsOn}`);
+      if (e.toppledOff) log(t("log.wc.toppled", { id: e.boxId, from: e.toppledOff, to: e.restsOn }), "error");
+      else log(t("log.wc.released", { id: e.boxId, to: e.restsOn }));
     }
   },
 

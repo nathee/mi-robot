@@ -29,6 +29,7 @@ import { useProjectStore } from "./useProjectStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { t } from "@/lib/i18n";
 
 export type PathPlaybackStatus = "IDLE" | "PLAYING" | "PAUSED" | "COMPLETED" | "ERROR";
 
@@ -177,7 +178,7 @@ export const usePathStore = create<PathState>((set, get) => ({
     const pose = fkPose6DFromJointsDeg(joints);
     const ws = checkWorkspaceXYZ(pose.x, pose.y, pose.z, useViewerStore.getState().workspace);
     if (!ws.ok) {
-      logPath(`Cannot teach target: ${ws.message}`, "error");
+      logPath(t("log.path.cannotTeach", { reason: ws.message }), "error");
       return null;
     }
 
@@ -202,7 +203,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Added target ${name} (X:${pose.x.toFixed(1)} Y:${pose.y.toFixed(1)} Z:${pose.z.toFixed(1)} mm)`);
+    logPath(t("log.path.added", { name, x: pose.x.toFixed(1), y: pose.y.toFixed(1), z: pose.z.toFixed(1) }));
     return target;
   },
 
@@ -217,7 +218,7 @@ export const usePathStore = create<PathState>((set, get) => ({
     const pose = fkPose6DFromJointsDeg(joints);
     const ws = checkWorkspaceXYZ(pose.x, pose.y, pose.z, useViewerStore.getState().workspace);
     if (!ws.ok) {
-      logPath(`Cannot update target: ${ws.message}`, "error");
+      logPath(t("log.path.cannotUpdate", { reason: ws.message }), "error");
       return false;
     }
 
@@ -232,7 +233,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Updated target ${nextTargets[idx].name}`);
+    logPath(t("log.path.updated", { name: nextTargets[idx].name }));
     return true;
   },
 
@@ -243,7 +244,7 @@ export const usePathStore = create<PathState>((set, get) => ({
     get().cancelForManualControl();
     useRobotStore.getState().setJoints(target.joints, { syncIk: true });
     set({ activeTargetIndex: index });
-    logPath(`Moved to ${target.name}`);
+    logPath(t("log.path.movedTo", { name: target.name }));
     return true;
   },
 
@@ -271,7 +272,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Reordered ${moved.name} to #${toIndex + 1}`);
+    logPath(t("log.path.reordered", { name: moved.name, n: toIndex + 1 }));
   },
 
   moveTarget(index, delta) {
@@ -297,7 +298,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Removed target ${removed.name}`);
+    logPath(t("log.path.removed", { name: removed.name }));
   },
 
   renameTarget(index, nextName) {
@@ -317,7 +318,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       redoStack: [],
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Renamed target ${oldName} -> ${trimmed}`);
+    logPath(t("log.path.renamed", { from: oldName, to: trimmed }));
     return true;
   },
 
@@ -326,7 +327,7 @@ export const usePathStore = create<PathState>((set, get) => ({
     const selected = state.targets[state.activeTargetIndex];
     if (!selected) return false;
     set({ clipboard: clonePathTarget(selected) });
-    logPath(`Copied target ${selected.name}`);
+    logPath(t("log.path.copied", { name: selected.name }));
     return true;
   },
 
@@ -354,7 +355,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath(`Pasted target ${pasted.name}`);
+    logPath(t("log.path.pasted", { name: pasted.name }));
     return true;
   },
 
@@ -373,7 +374,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       redoStack: [],
     });
     useProjectStore.getState().setDirty(true);
-    logPath("Cleared all targets");
+    logPath(t("log.path.cleared"));
   },
 
   undo() {
@@ -390,7 +391,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath("Undo target edit");
+    logPath(t("log.path.undo"));
     return true;
   },
 
@@ -408,7 +409,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       status: "IDLE",
     });
     useProjectStore.getState().setDirty(true);
-    logPath("Redo target edit");
+    logPath(t("log.path.redo"));
     return true;
   },
 
@@ -424,19 +425,19 @@ export const usePathStore = create<PathState>((set, get) => ({
     const state = get();
     if (state.status === "PLAYING") {
       set({ status: "PAUSED" });
-      logPath("Paused playback");
+      logPath(t("log.path.paused"));
       return;
     }
 
     if (!get().canPlay()) {
       const minPts = state.settings.motionType === "MOVEC" ? "3 (odd count: 3, 5, 7...)" : "2";
-      logPath(`Need at least ${minPts} targets for ${state.settings.motionType}`, "error");
+      logPath(t("log.path.needAtLeast", { n: minPts, motion: state.settings.motionType }), "error");
       return;
     }
 
     if (state.status === "PAUSED") {
       set({ status: "PLAYING" });
-      logPath("Resumed playback");
+      logPath(t("log.path.resumed"));
       return;
     }
 
@@ -464,7 +465,11 @@ export const usePathStore = create<PathState>((set, get) => ({
       ),
     });
     logPath(
-      `Started ${state.settings.motionType} (${state.settings.trajectoryProfile}) x${state.repeatCount}`
+      t("log.path.started", {
+        motion: state.settings.motionType,
+        profile: state.settings.trajectoryProfile,
+        n: state.repeatCount,
+      })
     );
   },
 
@@ -483,7 +488,7 @@ export const usePathStore = create<PathState>((set, get) => ({
     const st = get().status;
     if (st !== "PLAYING" && st !== "PAUSED") return;
     set({ status: "ERROR", segmentElapsedMs: 0, repeatRemaining: 0 });
-    logPath(`Stopped: collision (${message})`, "error");
+    logPath(t("log.path.collision", { what: message }), "error");
   },
 
   cancelForManualControl() {
@@ -513,7 +518,7 @@ export const usePathStore = create<PathState>((set, get) => ({
         0
       ),
     });
-    logPath("Reset path playback");
+    logPath(t("log.path.reset"));
   },
 
   stepProgram() {
@@ -535,7 +540,7 @@ export const usePathStore = create<PathState>((set, get) => ({
         nextIdx / Math.max(1, state.targets.length - 1)
       ),
     });
-    logPath(`Stepped to ${target.name} (#${nextIdx + 1}/${state.targets.length})`);
+    logPath(t("log.path.stepped", { name: target.name, i: nextIdx + 1, n: state.targets.length }));
   },
 
   advancePlaybackFrame(dtMs) {
@@ -587,7 +592,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       const desired = desiredCartesianPathPose(ctx, sample.position, state.settings.motionType);
       if (!desired) {
         set({ status: "ERROR" });
-        logPath(`Segment ${ctx.label} failed: invalid Cartesian geometry`, "error");
+        logPath(t("log.path.segmentFailed", { segment: ctx.label }), "error");
         return;
       }
 
@@ -601,7 +606,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       if (!solved || !isIkResultAcceptable(solved.err)) {
         set({ status: "ERROR" });
         logPath(
-          `IK failed during ${ctx.label} (${(solved?.err.posMm ?? 999).toFixed(2)} mm)`,
+          t("log.path.ikFailed", { segment: ctx.label, mm: (solved?.err.posMm ?? 999).toFixed(2) }),
           "error"
         );
         return;
@@ -653,14 +658,14 @@ export const usePathStore = create<PathState>((set, get) => ({
             lastTelemetryJoints: first.joints.slice(),
             lastTelemetryVelocity: 0,
           });
-          logPath(`Repeating cycle (${remaining} remaining)`);
+          logPath(t("log.path.repeating", { n: remaining }));
         } else {
           set({
             status: "COMPLETED",
             activeTargetIndex: state.targets.length - 1,
             repeatRemaining: 0,
           });
-          logPath("Path playback completed", "ok");
+          logPath(t("log.path.completed"), "ok");
         }
       }
     }
@@ -694,7 +699,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       redoStack: [],
     });
     useProjectStore.getState().setName("Demo Pick & Place", false);
-    logPath("Loaded 5-point Demo Pick & Place path — press Play to simulate", "ok");
+    logPath(t("log.path.demoLoaded"), "ok");
   },
 
   newProgram() {
@@ -713,7 +718,7 @@ export const usePathStore = create<PathState>((set, get) => ({
       redoStack: [],
     });
     useProjectStore.getState().resetProject();
-    logPath("Created new path program");
+    logPath(t("log.path.created"));
   },
 
   importProgramText(filename, content) {
@@ -754,10 +759,10 @@ export const usePathStore = create<PathState>((set, get) => ({
     });
 
     logPath(
-      `Loaded ${filename} (${parsed.targets.length} targets, ${parsed.settings.motionType})`,
+      t("log.path.loaded", { file: filename, n: parsed.targets.length, motion: parsed.settings.motionType }),
       "ok"
     );
-    parsed.warnings.forEach((w) => logPath(`Warning: ${w}`, "sys"));
+    parsed.warnings.forEach((w) => logPath(t("log.warning", { text: w }), "sys"));
     return { warnings: parsed.warnings };
   },
 

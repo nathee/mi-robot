@@ -1,5 +1,7 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from "three";
 import type { ToolDef } from "@/lib/tools/toolDefs";
+import { t } from "@/lib/i18n";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 
 /**
  * Pure (render-free) work-cell simulation: boxes, a tray and a conveyor belt.
@@ -112,6 +114,16 @@ export const DEFAULT_CONVEYOR: ConveyorConfig = {
 export const DEFAULT_PLATFORMS: Platform[] = [
   { id: "tray", label: "Tray", x: 200, y: 110, sizeX: 130, sizeY: 90, topZ: 20, color: "#64748b" },
 ];
+
+/** Default conveyor for the active robot (read at call time: the robot can change). */
+export function defaultConveyor(): ConveyorConfig {
+  return { ...(getActiveRobotProfile().workcell?.conveyor ?? DEFAULT_CONVEYOR) };
+}
+
+/** Default trays for the active robot. */
+export function defaultPlatforms(): Platform[] {
+  return (getActiveRobotProfile().workcell?.platforms ?? DEFAULT_PLATFORMS).map((p) => ({ ...p }));
+}
 
 export const PLATFORM_COLORS = ["#64748b", "#78716c", "#0f766e", "#7c3aed"];
 
@@ -927,9 +939,21 @@ export const WORKCELL_PRESETS: Record<WorkcellPresetId, { label: string; descrip
   },
 };
 
+/** Localized preset text for display. */
+export function workcellPresetText(id: WorkcellPresetId, field: "label" | "description"): string {
+  return t(`workcell.preset.${id}.${field}`);
+}
+
+/** Platform labels are stored in English ("Tray", "Tray 2"); translate them for display. */
+export function platformDisplayLabel(label: string): string {
+  if (label === "Tray") return t("workcell.tray");
+  const m = /^Tray (\d+)$/.exec(label);
+  return m ? t("workcell.trayN", { n: m[1] }) : label;
+}
+
 export function buildPreset(id: WorkcellPresetId): WorkcellSnapshot {
-  const conveyor = { ...DEFAULT_CONVEYOR };
-  const platforms = DEFAULT_PLATFORMS.map((p) => ({ ...p }));
+  const conveyor = defaultConveyor();
+  const platforms = defaultPlatforms();
   const tray = platforms[0];
   const s = DEFAULT_BOX_SIZE;
   let boxes: WorkBox[] = [];
@@ -956,7 +980,7 @@ export function buildPreset(id: WorkcellPresetId): WorkcellSnapshot {
 // Layout editing: move / resize the conveyor and trays, carrying resting boxes along.
 // ---------------------------------------------------------------------------
 
-/** Robot reach (mm, horizontal) used to warn when a station is placed out of reach. */
+/** Generic robot reach (mm, horizontal) used to warn when a station is placed out of reach. */
 export const REACH_MIN_MM = 80;
 export const REACH_MAX_MM = 300;
 
@@ -964,8 +988,9 @@ export type ReachStatus = "OK" | "TOO_CLOSE" | "TOO_FAR";
 
 export function reachStatus(x: number, y: number): ReachStatus {
   const r = Math.hypot(x, y);
-  if (r < REACH_MIN_MM) return "TOO_CLOSE";
-  if (r > REACH_MAX_MM) return "TOO_FAR";
+  const wc = getActiveRobotProfile().workcell;
+  if (r < (wc?.reachMinMm ?? REACH_MIN_MM)) return "TOO_CLOSE";
+  if (r > (wc?.reachMaxMm ?? REACH_MAX_MM)) return "TOO_FAR";
   return "OK";
 }
 
@@ -985,12 +1010,13 @@ function clampNum(v: unknown, min: number, max: number, fallback: number): numbe
 }
 
 export function normalizeConveyor(c: ConveyorConfig): ConveyorConfig {
+  const def = defaultConveyor();
   return {
-    x: clampNum(c.x, -400, 400, DEFAULT_CONVEYOR.x),
-    y: clampNum(c.y, -400, 400, DEFAULT_CONVEYOR.y),
-    lengthMm: clampNum(c.lengthMm, 100, 600, DEFAULT_CONVEYOR.lengthMm),
-    widthMm: clampNum(c.widthMm, 30, 120, DEFAULT_CONVEYOR.widthMm),
-    topZ: clampNum(c.topZ, 20, 200, DEFAULT_CONVEYOR.topZ),
+    x: clampNum(c.x, -400, 400, def.x),
+    y: clampNum(c.y, -400, 400, def.y),
+    lengthMm: clampNum(c.lengthMm, 100, 600, def.lengthMm),
+    widthMm: clampNum(c.widthMm, 30, 120, def.widthMm),
+    topZ: clampNum(c.topZ, 20, 200, def.topZ),
     axis: c.axis === "y" ? "y" : "x",
   };
 }

@@ -22,6 +22,7 @@ import {
 } from "@/stores/useHardwareStore";
 import { triggerTextDownload } from "./Toolbar";
 import { ToggleSwitch, useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 interface HardwareModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ interface HardwareModalProps {
 const BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400];
 
 export function HardwareModal({ open, onClose }: HardwareModalProps) {
+  const t = useT();
   const [tab, setTab] = useState<"serial" | "wifi" | "esp32">("serial");
   const [testInput, setTestInput] = useState("@01 M21 G90 X-35 Y22 Z-28 A0 B-15 C0 F3000");
   const [showTester, setShowTester] = useState(false);
@@ -81,7 +83,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="ESP32 and RS485 Hardware Link"
+      aria-label={t("hw.title")}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
@@ -103,16 +105,16 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Hardware Link — ESP32 / RS485
+                {t("hw.title")}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Drive the virtual robot from an external controller via USB-RS485 or Wi-Fi
+                {t("hw.subtitle")}
               </p>
             </div>
           </div>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
@@ -156,7 +158,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
             }`}
           >
             <Cpu className="h-3.5 w-3.5" />
-            ESP32 Sketch
+            {t("hw.tabSketch")}
           </button>
         </div>
 
@@ -171,7 +173,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 }`}
               />
               <span className="font-semibold text-slate-800 dark:text-slate-100">
-                {connected ? `Connected (${transport})` : "Disconnected"}
+                {connected ? t("hw.connected", { transport }) : t("hw.disconnected")}
               </span>
             </div>
             <div className="flex items-center gap-3 font-mono text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
@@ -203,7 +205,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="flex flex-col gap-1.5">
-                  <span className="font-medium text-slate-600 dark:text-slate-300">Baud Rate</span>
+                  <span className="font-medium text-slate-600 dark:text-slate-300">{t("hw.baud")}</span>
                   <select
                     disabled={connected}
                     value={baudRate}
@@ -220,14 +222,14 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
 
                 <label className="flex flex-col gap-1.5">
                   <span className="font-medium text-slate-600 dark:text-slate-300">
-                    RS485 Address
+                    {t("hw.address")}
                   </span>
                   <select
                     value={addressFilter}
                     onChange={(e) => setAddressFilter(e.target.value)}
                     className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
                   >
-                    <option value="ANY">Any address</option>
+                    <option value="ANY">{t("hw.anyAddress")}</option>
                     {Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(2, "0")).map(
                       (addr) => (
                         <option key={addr} value={addr}>
@@ -240,15 +242,15 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
 
                 <label className="flex flex-col gap-1.5">
                   <span className="font-medium text-slate-600 dark:text-slate-300">
-                    Motion Style
+                    {t("hw.motionStyle")}
                   </span>
                   <select
                     value={motionMode}
                     onChange={(e) => setMotionMode(e.target.value as HardwareMotionMode)}
                     className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-sky-500 dark:border-slate-700 dark:bg-slate-950"
                   >
-                    <option value="SMOOTH">Smooth (G-code)</option>
-                    <option value="INSTANT">Instant (Joystick)</option>
+                    <option value="SMOOTH">{t("hw.smooth")}</option>
+                    <option value="INSTANT">{t("hw.instant")}</option>
                   </select>
                 </label>
               </div>
@@ -257,14 +259,14 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-medium text-slate-800 dark:text-slate-200">
-                      Auto-reply WLKATA status
+                      {t("hw.autoReply")}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
                       Reply <code>ok</code> and <code>&lt;Idle,…&gt;</code> frames back over RS485
                     </div>
                   </div>
                   <ToggleSwitch
-                    aria-label="Auto-reply WLKATA status"
+                    aria-label={t("hw.autoReply")}
                     checked={autoReply}
                     onChange={setAutoReply}
                   />
@@ -275,14 +277,14 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-medium text-slate-800 dark:text-slate-200">
-                      Push light sensor events
+                      {t("hw.pushSensor")}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Send <code>SENSOR=1/0</code> on change (query with <code>@01SENSOR?</code>)
+                      {t("hw.pushSensorHintA")}<code>SENSOR=1/0</code>{t("hw.pushSensorHintB")}<code>@01SENSOR?</code>{t("hw.pushSensorHintC")}
                     </div>
                   </div>
                   <ToggleSwitch
-                    aria-label="Push light sensor events"
+                    aria-label={t("hw.pushSensor")}
                     checked={reportSensor}
                     onChange={setReportSensor}
                   />
@@ -298,7 +300,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:opacity-40"
                   >
                     <Plug className="h-3.5 w-3.5" />
-                    Connect USB-RS485 Port
+                    {t("hw.connectPort")}
                   </button>
                 ) : (
                   <button
@@ -307,13 +309,13 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-rose-500"
                   >
                     <PlugZap className="h-3.5 w-3.5" />
-                    Disconnect
+                    {t("hw.disconnect")}
                   </button>
                 )}
 
                 {!hasWebSerial && (
                   <span className="text-[11px] text-amber-500">
-                    Use Chrome or Edge to access USB Web Serial.
+                    {t("hw.useChrome")}
                   </span>
                 )}
               </div>
@@ -327,7 +329,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 >
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-indigo-700 dark:text-indigo-300">
-                      IDX-485 Monitor &amp; Virtual HMI (@99)
+                      {t("hw.idxMonitor")}
                     </span>
                     {idxTelemetry && (
                       <span
@@ -377,7 +379,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                       </div>
                     ) : (
                       <div className="font-mono text-[10px] text-slate-400">
-                        Waiting for @99o200=… telemetry from IDX-485
+                        {t("hw.waitingTelemetry")}
                       </div>
                     )}
 
@@ -441,8 +443,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
           {tab === "wifi" && (
             <div className="space-y-3">
               <p className="text-slate-500 dark:text-slate-400">
-                Connect wirelessly to an ESP32 WebSocket server using the same G-code / JSON / CSV
-                protocol.
+                {t("hw.wifiHint")}
               </p>
               <div className="flex gap-2">
                 <input
@@ -460,7 +461,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500"
                   >
                     <Wifi className="h-3.5 w-3.5" />
-                    Connect
+                    {t("hw.connect")}
                   </button>
                 ) : (
                   <button
@@ -468,7 +469,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     onClick={() => void disconnect()}
                     className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-rose-500"
                   >
-                    Disconnect
+                    {t("hw.disconnect")}
                   </button>
                 )}
               </div>
@@ -480,13 +481,13 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
             <div className="space-y-3">
               <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-3">
                 <div className="font-semibold text-sky-700 dark:text-sky-300">
-                  IDX-485 (ESP32-C5) + HMI-485 + USB-RS485 Shared Bus
+                  {t("hw.sharedBus")}
                 </div>
                 <div className="mt-1.5 grid grid-cols-1 gap-1 font-mono text-[11px] text-slate-700 sm:grid-cols-2 dark:text-slate-300">
                   <div>RS-485: GPIO4 (RX2) / GPIO5 (TX2) @ 115200</div>
                   <div>+A ↔ USB A · -B ↔ B · S.GND ↔ GND</div>
-                  <div>HMI-485 (@99): Parallel on same A/B bus</div>
-                  <div>Supports Raw @01 G-Code &amp; &lt;Mirobot.h&gt;</div>
+                  <div>{t("hw.hmiParallel")}</div>
+                  <div>{t("hw.supports")}</div>
                 </div>
               </div>
 
@@ -505,7 +506,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     ) : (
                       <Copy className="h-3 w-3" />
                     )}
-                    {copied ? "Copied!" : "Copy"}
+                    {copied ? t("common.copied") : t("common.copy")}
                   </button>
                   <button
                     type="button"
@@ -519,7 +520,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                     className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white transition hover:bg-sky-500"
                   >
                     <Download className="h-3 w-3" />
-                    Download .ino
+                    {t("hw.downloadIno")}
                   </button>
                 </div>
               </div>
@@ -538,7 +539,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                 onClick={() => setShowTester((v) => !v)}
                 className="flex w-full items-center justify-between bg-slate-50/70 px-3.5 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:bg-slate-950/40 dark:text-slate-200 dark:hover:bg-slate-800/60"
               >
-                <span>Virtual RS485 Command Tester</span>
+                <span>{t("hw.tester")}</span>
                 {showTester ? (
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 ) : (
@@ -564,7 +565,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                       className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500"
                     >
                       <Send className="h-3 w-3" />
-                      Inject
+                      {t("hw.inject")}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -595,7 +596,7 @@ export function HardwareModal({ open, onClose }: HardwareModalProps) {
                   </div>
                   {lastRx && (
                     <div className="truncate font-mono text-[10px] text-slate-500 dark:text-slate-400">
-                      Last RX: <span className="text-emerald-500">{lastRx}</span>
+                      {t("hw.lastRx")}: <span className="text-emerald-500">{lastRx}</span>
                     </div>
                   )}
                 </div>

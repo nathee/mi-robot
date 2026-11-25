@@ -8,23 +8,26 @@ import { CodePanel } from "./CodePanel";
 import { JogPanel } from "./JogPanel";
 import { PathPanel } from "./PathPanel";
 import { ToolPanel } from "./ToolPanel";
+import { useT } from "@/lib/i18n/useT";
+import type { MessageKey } from "@/lib/i18n";
 
 interface ControlSidebarProps {
   onRequestRenameTarget: (index: number, currentName: string) => void;
   onRequestClearTargets: () => void;
 }
 
-const TABS: Array<{ id: SidebarPanel; label: string; icon: typeof Sliders }> = [
-  { id: "JOG", label: "Manual", icon: Sliders },
-  { id: "TOOLS", label: "Tools", icon: Wrench },
-  { id: "PATH", label: "Path", icon: Route },
-  { id: "CODE", label: "Code", icon: Code2 },
+const TABS: Array<{ id: SidebarPanel; label: MessageKey; icon: typeof Sliders }> = [
+  { id: "JOG", label: "sidebar.manual", icon: Sliders },
+  { id: "TOOLS", label: "sidebar.tools", icon: Wrench },
+  { id: "PATH", label: "sidebar.path", icon: Route },
+  { id: "CODE", label: "sidebar.code", icon: Code2 },
 ];
 
 export function ControlSidebar({
   onRequestRenameTarget,
   onRequestClearTargets,
 }: ControlSidebarProps) {
+  const t = useT();
   const sidebarPanel = useViewerStore((s) => s.sidebarPanel);
   const setField = useViewerStore((s) => s.setField);
   const targetsCount = usePathStore((s) => s.targets.length);
@@ -36,7 +39,7 @@ export function ControlSidebar({
       {/* Primary Underline Navigation: Manual | Tools | Path | Code */}
       <nav
         role="tablist"
-        aria-label="Control panels"
+        aria-label={t("sidebar.panels")}
         className="grid shrink-0 grid-cols-4 border-b border-slate-200/90 bg-white px-1 dark:border-slate-800 dark:bg-slate-900/95"
       >
         {TABS.map(({ id, label, icon: Icon }) => {
@@ -56,7 +59,7 @@ export function ControlSidebar({
               }`}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{label}</span>
+              <span className="truncate">{t(label)}</span>
               {id === "PATH" && targetsCount > 0 && !isLive && (
                 <span className="rounded-full bg-sky-500/15 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none tabular-nums text-sky-600 dark:text-sky-400">
                   {targetsCount}
@@ -65,7 +68,7 @@ export function ControlSidebar({
               {isLive && (
                 <span
                   className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-500"
-                  title="Running"
+                  title={t("common.running")}
                 />
               )}
             </button>

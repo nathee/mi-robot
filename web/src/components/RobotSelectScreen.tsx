@@ -5,7 +5,15 @@ import { ArrowRight, Bot, Cable, Check, Move3d, Ruler, Usb, X } from "lucide-rea
 import { APP_NAME } from "@/lib/appConfig";
 import { ROBOT_MODEL_IDS, ROBOT_PROFILES, type RobotModelId, type RobotProfile } from "@/lib/robots";
 import { useRobotModelStore } from "@/stores/useRobotModelStore";
+import { useLocaleStore } from "@/stores/useLocaleStore";
+import type { MessageKey } from "@/lib/i18n";
 import { useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
+
+const SUMMARY_KEY: Record<RobotModelId, MessageKey> = {
+  mirobot: "robot.summary.mirobot",
+  xarm2: "robot.summary.xarm2",
+};
 
 const INTERFACE_LABEL: Record<RobotProfile["hardwareDriver"], { label: string; icon: typeof Cable }> = {
   WLKATA_RS485: { label: "RS-485 / ESP32 Wi-Fi", icon: Cable },
@@ -64,11 +72,14 @@ function Spec({ icon: Icon, children }: { icon: typeof Cable; children: React.Re
 }
 
 export function RobotSelectScreen() {
+  const t = useT();
   const loadedModel = useRobotModelStore((s) => s.loadedModel);
   const suggestedModel = useRobotModelStore((s) => s.suggestedModel);
   const rememberSaved = useRobotModelStore((s) => s.remember);
   const chooseModel = useRobotModelStore((s) => s.chooseModel);
   const closeSelector = useRobotModelStore((s) => s.closeSelector);
+  const locale = useLocaleStore((s) => s.locale);
+  const setLocale = useLocaleStore((s) => s.setLocale);
 
   const [picked, setPicked] = useState<RobotModelId>(suggestedModel);
   const [remember, setRemember] = useState(rememberSaved);
@@ -93,16 +104,35 @@ export function RobotSelectScreen() {
       aria-labelledby="robot-select-title"
     >
       <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xl sm:p-7 dark:border-slate-800 dark:bg-slate-900">
+        <div className="absolute top-3 right-3 flex items-center gap-1">
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-[11px] font-semibold dark:border-slate-700" role="group" aria-label={t("lang.switch")}>
+            {(["en", "th"] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLocale(l)}
+                aria-pressed={locale === l}
+                className={`rounded-md px-2 py-1 transition ${
+                  locale === l
+                    ? "bg-sky-600 text-white"
+                    : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                }`}
+              >
+                {l === "en" ? "EN" : "TH"}
+              </button>
+            ))}
+          </div>
         {isSwitch && (
           <button
             type="button"
             onClick={closeSelector}
-            aria-label="Close"
-            className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            aria-label={t("common.close")}
+            className=" inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
             <X className="h-4 w-4" />
           </button>
         )}
+        </div>
 
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs">
@@ -113,12 +143,12 @@ export function RobotSelectScreen() {
               {APP_NAME}
             </p>
             <h1 id="robot-select-title" className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              {isSwitch ? "Switch robot arm" : "Choose a robot arm"}
+              {isSwitch ? t("robotSelect.switchTitle") : t("robotSelect.chooseTitle")}
             </h1>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Robot arm">
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t("robotSelect.robotArm")}>
           {ROBOT_MODEL_IDS.map((id) => {
             const p = ROBOT_PROFILES[id];
             const selected = picked === id;
@@ -148,7 +178,7 @@ export function RobotSelectScreen() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">{p.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{p.summary}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t(SUMMARY_KEY[id])}</p>
                     </div>
                     <span
                       className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border ${
@@ -162,14 +192,14 @@ export function RobotSelectScreen() {
                   </div>
                   <ul className="mt-3 space-y-1.5">
                     <Spec icon={Move3d}>
-                      {p.activeJointCount} axes{p.activeJointCount < 6 ? " + gripper" : ""}
+                      {t(p.activeJointCount < 6 ? "robotSelect.axesGripper" : "robotSelect.axes", { n: p.activeJointCount })}
                     </Spec>
-                    <Spec icon={Ruler}>~{Math.round(p.reachMm)} mm reach</Spec>
+                    <Spec icon={Ruler}>{t("robotSelect.reach", { mm: Math.round(p.reachMm) })}</Spec>
                     <Spec icon={iface.icon}>{iface.label}</Spec>
                   </ul>
                   {loadedModel === id && (
                     <span className="mt-3 inline-block rounded-md bg-emerald-500/12 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
-                      Current
+                      {t("robotSelect.current")}
                     </span>
                   )}
                 </div>
@@ -186,7 +216,7 @@ export function RobotSelectScreen() {
               onChange={(e) => setRemember(e.target.checked)}
               className="h-3.5 w-3.5 rounded accent-sky-600"
             />
-            Open this robot directly next time
+            {t("robotSelect.remember")}
           </label>
           <div className="flex items-center gap-2">
             {isSwitch && (
@@ -196,7 +226,7 @@ export function RobotSelectScreen() {
                 disabled={busy}
                 className="inline-flex h-9 items-center rounded-lg px-3.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
             )}
             <button
@@ -205,7 +235,11 @@ export function RobotSelectScreen() {
               disabled={busy}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-600 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500 disabled:opacity-60"
             >
-              {busy ? "Switching…" : willReload ? "Switch robot" : `Open ${ROBOT_PROFILES[picked].name}`}
+              {busy
+                ? t("robotSelect.switching")
+                : willReload
+                  ? t("robotSelect.switchRobot")
+                  : t("robotSelect.open", { name: ROBOT_PROFILES[picked].name })}
               {!busy && <ArrowRight className="h-3.5 w-3.5" />}
             </button>
           </div>
@@ -213,8 +247,7 @@ export function RobotSelectScreen() {
 
         {willReload && (
           <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
-            The simulator reloads for the new robot. Each robot keeps its own session and work history,
-            so your {ROBOT_PROFILES[loadedModel!].name} program is saved and comes back when you switch back.
+            {t("robotSelect.reloadNote", { name: ROBOT_PROFILES[loadedModel!].name })}
           </p>
         )}
       </div>

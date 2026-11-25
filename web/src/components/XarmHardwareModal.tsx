@@ -18,6 +18,7 @@ import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { XARM_HID_PRODUCT_ID, XARM_HID_VENDOR_ID, XARM_UART_BAUD } from "@/lib/hardware/hiwonderXarm";
 import { useXarmLinkStore } from "@/stores/useXarmLinkStore";
 import { ToggleSwitch, useEscapeKey } from "./ui";
+import { useT } from "@/lib/i18n/useT";
 
 interface XarmHardwareModalProps {
   open: boolean;
@@ -43,6 +44,7 @@ function Row({ title, hint, children }: { title: string; hint: string; children:
 
 /** Real-arm link for the Hiwonder xArm: the simulator is the master and drives the servos. */
 export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
+  const t = useT();
   const connected = useXarmLinkStore((s) => s.connected);
   const transport = useXarmLinkStore((s) => s.transport);
   const deviceLabel = useXarmLinkStore((s) => s.deviceLabel);
@@ -68,7 +70,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`${profile.name} hardware link`}
+      aria-label={t("xarm.ariaTitle", { name: profile.name })}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
@@ -87,16 +89,16 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Real arm — {profile.name}
+                {t("xarm.title", { name: profile.name })}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Drive the bus servos from the simulator over USB
+                {t("xarm.subtitle")}
               </p>
             </div>
           </div>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t("common.close")}
             onClick={onClose}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
@@ -111,7 +113,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                 className={`h-2.5 w-2.5 shrink-0 rounded-full ${connected ? "animate-pulse bg-emerald-500" : "bg-slate-400"}`}
               />
               <span className="truncate font-semibold text-slate-800 dark:text-slate-100">
-                {connected ? `${deviceLabel} (${transport})` : "Disconnected"}
+                {connected ? `${deviceLabel} (${transport})` : t("hw.disconnected")}
               </span>
             </div>
             <div className="flex items-center gap-3 font-mono text-[11px] text-slate-500 tabular-nums dark:text-slate-400">
@@ -148,32 +150,31 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <PlugZap className="h-4 w-4" />
-                  Connect USB (HID)
+                  {t("xarm.connectHid")}
                 </button>
                 <button type="button" onClick={() => void link.connectSerial()} disabled={!hasSerial} className={BTN}>
                   <Cable className="h-4 w-4" />
-                  USB serial ({XARM_UART_BAUD} baud)
+                  {t("xarm.connectSerial", { baud: XARM_UART_BAUD })}
                 </button>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Plug the arm in with USB and switch it on. <strong>USB (HID)</strong> finds the controller board as{" "}
+                {t("xarm.plugA")}<strong>USB (HID)</strong>{t("xarm.plugB")}{" "}
                 <span className="font-mono">
                   {hex4(XARM_HID_VENDOR_ID)}:{hex4(XARM_HID_PRODUCT_ID)}
                 </span>
-                . Use <strong>USB serial</strong> for a USB-TTL adapter on the board&apos;s serial header. Both need
-                Chrome or Edge on desktop.
+                {t("xarm.plugC")}<strong>{t("xarm.usbSerial")}</strong>{t("xarm.plugD")}
               </p>
             </div>
           ) : (
             <div className="space-y-2.5">
               <Row
-                title="Follow simulator"
-                hint="Every jog, IK move, path or program step moves the real arm. It first moves slowly to the simulator pose."
+                title={t("xarm.follow")}
+                hint={t("xarm.followHint")}
               >
-                <ToggleSwitch checked={mirror} onChange={(v) => link.setMirror(v)} aria-label="Follow simulator" />
+                <ToggleSwitch checked={mirror} onChange={(v) => link.setMirror(v)} aria-label={t("xarm.follow")} />
               </Row>
 
-              <Row title="Max speed" hint="Caps mirrored moves so a sudden jump in the simulator stays gentle.">
+              <Row title={t("xarm.maxSpeed")} hint={t("xarm.maxSpeedHint")}>
                 <div className="flex items-center gap-2">
                   <input
                     type="range"
@@ -182,7 +183,7 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                     step={10}
                     value={maxSpeed}
                     onChange={(e) => link.setMaxSpeed(Number(e.target.value))}
-                    aria-label="Max speed in degrees per second"
+                    aria-label={t("xarm.maxSpeedAria")}
                     className="w-28 accent-sky-600"
                   />
                   <span className="w-14 text-right font-mono tabular-nums">{maxSpeed}°/s</span>
@@ -190,28 +191,28 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
               </Row>
 
               <Row
-                title="Teach by hand"
-                hint="Releases the servos so you can pose the arm by hand; the simulator follows. Turn on Follow simulator to lock them again."
+                title={t("xarm.teach")}
+                hint={t("xarm.teachHint")}
               >
-                <ToggleSwitch checked={teach} onChange={(v) => link.setTeach(v)} aria-label="Teach by hand" />
+                <ToggleSwitch checked={teach} onChange={(v) => link.setTeach(v)} aria-label={t("xarm.teach")} />
               </Row>
 
               <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
                 <button type="button" className={BTN} onClick={() => void link.readPositions()} title="Read every servo and move the simulator there">
                   <Download className="h-3.5 w-3.5" />
-                  Read positions
+                  {t("xarm.readPositions")}
                 </button>
                 <button type="button" className={BTN} onClick={() => void link.sendCurrentPose()} title="Send the simulator pose once (1.5 s move)">
                   <Send className="h-3.5 w-3.5" />
-                  Send pose
+                  {t("xarm.sendPose")}
                 </button>
                 <button type="button" className={BTN} onClick={() => void link.servoOff()} title="Release torque on all servos">
                   <Hand className="h-3.5 w-3.5" />
-                  Servos off
+                  {t("xarm.servosOff")}
                 </button>
                 <button type="button" className={BTN} onClick={() => void link.disconnect()}>
                   <Power className="h-3.5 w-3.5" />
-                  Disconnect
+                  {t("hw.disconnect")}
                 </button>
               </div>
             </div>
@@ -220,9 +221,8 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
           <div className="flex gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
-              The arm dimensions, servo directions and gripper positions are first estimates. Before the first run, press{" "}
-              <strong>Read positions</strong>, then jog one joint at a time at low speed and check it turns the same way as
-              the simulator. Correct any differences in <span className="font-mono">src/lib/robots/xarm2.ts</span>.
+              {t("xarm.warnA")}{" "}
+              <strong>{t("xarm.readPositions")}</strong>{t("xarm.warnB")}<span className="font-mono">src/lib/robots/xarm2.ts</span>.
             </span>
           </div>
 
@@ -234,16 +234,16 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                 className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               >
                 <Plug className="h-3.5 w-3.5" />
-                {showMap ? "Hide" : "Show"} servo map
+                {showMap ? t("xarm.hideMap") : t("xarm.showMap")}
               </button>
               {showMap && (
                 <table className="mt-2 w-full overflow-hidden rounded-lg text-left font-mono text-[11px]">
                   <thead className="bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                     <tr>
-                      <th className="px-2.5 py-1.5 font-semibold">Joint</th>
+                      <th className="px-2.5 py-1.5 font-semibold">{t("viewer.joint")}</th>
                       <th className="px-2.5 py-1.5 font-semibold">Servo ID</th>
-                      <th className="px-2.5 py-1.5 font-semibold">Direction</th>
-                      <th className="px-2.5 py-1.5 font-semibold">Offset</th>
+                      <th className="px-2.5 py-1.5 font-semibold">{t("xarm.direction")}</th>
+                      <th className="px-2.5 py-1.5 font-semibold">{t("xarm.offset")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -256,10 +256,10 @@ export function XarmHardwareModal({ open, onClose }: XarmHardwareModalProps) {
                       </tr>
                     ))}
                     <tr>
-                      <td className="px-2.5 py-1.5">Gripper</td>
+                      <td className="px-2.5 py-1.5">{t("xarm.gripper")}</td>
                       <td className="px-2.5 py-1.5">#{servos.gripper.servoId}</td>
                       <td className="px-2.5 py-1.5" colSpan={2}>
-                        open {servos.gripper.openPos} / close {servos.gripper.closePos}
+                        {t("xarm.gripperPos", { open: servos.gripper.openPos, close: servos.gripper.closePos })}
                       </td>
                     </tr>
                   </tbody>

@@ -9,6 +9,7 @@ import {
   type WorkspaceCheckResult,
   type WorkspaceConfig,
 } from "./constants";
+import { t } from "@/lib/i18n";
 
 export function finiteOr(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -211,7 +212,7 @@ export function checkWorkspaceXYZ(
   const pz = finiteOr(z, NaN);
 
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) {
-    return { ok: false, message: "Out of workspace: invalid XYZ target" };
+    return { ok: false, message: t("log.outOfWorkspaceInvalid") };
   }
 
   const reasons: string[] = [];
@@ -230,6 +231,6 @@ export function checkWorkspaceXYZ(
   }
 
   return reasons.length
-    ? { ok: false, message: `Out of workspace: ${reasons.join(", ")}` }
+    ? { ok: false, message: t("log.outOfWorkspace", { reasons: reasons.join(", ") }) }
     : { ok: true, message: "" };
 }

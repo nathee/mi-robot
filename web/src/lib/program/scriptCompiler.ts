@@ -3,6 +3,7 @@ import { checkWorkspaceXYZ } from "@/lib/kinematics/fk";
 import { stepsToGcode } from "./gcodeCompiler";
 import { isToolType, TOOL_TYPES, type ToolType } from "@/lib/tools/toolDefs";
 import type { CompileError, CompileResult, ProgramStep } from "./types";
+import { t } from "@/lib/i18n";
 
 interface ScriptNodeLine {
   line: number;
@@ -22,7 +23,7 @@ function parseNumericArgs(rawArgs: string): { positional: number[]; named: Recor
     } else {
       const n = Number(part);
       if (!Number.isFinite(n)) {
-        throw new Error(`Invalid number argument "${part}"`);
+        throw new Error(t("err.badNumber", { text: part }));
       }
       positional.push(n);
     }
@@ -59,7 +60,7 @@ export function compileScriptProgram(source: string): CompileResult {
     let i = startIdx;
     while (i < endIdx) {
       if (steps.length >= MAX_STEPS) {
-        errors.push({ line: cleaned[i].line, message: `Program exceeds ${MAX_STEPS} step limit` });
+        errors.push({ line: cleaned[i].line, message: t("err.maxStepLimit", { n: MAX_STEPS }) });
         return;
       }
 
@@ -70,7 +71,7 @@ export function compileScriptProgram(source: string): CompileResult {
       if (repeatMatch) {
         const count = Number(repeatMatch[1]);
         if (count < 1 || count > 50) {
-          errors.push({ line, message: "repeat count must be between 1 and 50" });
+          errors.push({ line, message: t("err.repeatRange") });
           return;
         }
         let depth = 1;
@@ -86,7 +87,7 @@ export function compileScriptProgram(source: string): CompileResult {
           }
         }
         if (matchEnd === -1) {
-          errors.push({ line, message: `Missing matching "end" for repeat block` });
+          errors.push({ line, message: t("err.missingEnd") });
           return;
         }
         for (let r = 0; r < count; r++) {
@@ -98,14 +99,14 @@ export function compileScriptProgram(source: string): CompileResult {
       }
 
       if (/^end$/i.test(text)) {
-        errors.push({ line, message: `Unexpected "end" without matching "repeat"` });
+        errors.push({ line, message: t("err.unexpectedEnd") });
         return;
       }
 
       // Function call statement: name(args)
       const callMatch = text.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/);
       if (!callMatch) {
-        errors.push({ line, message: `Invalid syntax: "${text}"` });
+        errors.push({ line, message: t("err.invalidSyntax", { text }) });
         i++;
         continue;
       }
@@ -119,13 +120,13 @@ export function compileScriptProgram(source: string): CompileResult {
         } else if (fn === "movej") {
           const { positional, named } = parseNumericArgs(argsRaw);
           if (positional.length !== 6) {
-            throw new Error("moveJ requires 6 joint angles: moveJ(j1, j2, j3, j4, j5, j6)");
+            throw new Error(t("err.moveJArgs"));
           }
           for (let jIdx = 0; jIdx < 6; jIdx++) {
             const lim = JOINT_LIMITS[jIdx];
             if (positional[jIdx] < lim.min || positional[jIdx] > lim.max) {
               throw new Error(
-                `J${jIdx + 1}=${positional[jIdx]}° out of range [${lim.min}°, ${lim.max}°]`
+                t("err.jointOutOfRange", { j: jIdx + 1, v: positional[jIdx], min: lim.min, max: lim.max })
               );
             }
           }
@@ -140,7 +141,7 @@ export function compileScriptProgram(source: string): CompileResult {
         } else if (fn === "movel") {
           const { positional, named } = parseNumericArgs(argsRaw);
           if (positional.length !== 6) {
-            throw new Error("moveL requires 6 values: moveL(x, y, z, rx, ry, rz)");
+            throw new Error(t("err.moveLArgs"));
           }
           const pose: Pose6D = {
             x: positional[0],
@@ -165,7 +166,7 @@ export function compileScriptProgram(source: string): CompileResult {
           const { positional } = parseNumericArgs(argsRaw);
           const sec = positional[0];
           if (!Number.isFinite(sec) || sec < 0 || sec > 60) {
-            throw new Error("wait(seconds) expects a number between 0 and 60");
+            throw new Error(t("err.waitArgs"));
           }
           steps.push({
             type: "WAIT",
@@ -176,13 +177,13 @@ export function compileScriptProgram(source: string): CompileResult {
         } else if (fn === "gripper" || fn === "suction" || fn === "grab" || fn === "release") {
           let state: "OPEN" | "CLOSE";
           if (fn === "grab" || fn === "release") {
-            if (argsRaw) throw new Error(`${fn}() takes no arguments`);
+            if (argsRaw) throw new Error(t("err.noArgs", { fn }));
             state = fn === "grab" ? "CLOSE" : "OPEN";
           } else {
             const strMatch = argsRaw.match(/^["'](open|close|on|off)["']$/i);
             if (!strMatch) {
               throw new Error(
-                fn === "suction" ? `suction() expects "on" or "off"` : `gripper() expects "open" or "close"`
+                fn === "suction" ? t("err.suctionArgs") : t("err.gripperArgs")
               );
             }
             const arg = strMatch[1].toLowerCase();
@@ -201,14 +202,14 @@ export function compileScriptProgram(source: string): CompileResult {
           const strMatch = argsRaw.match(/^["']([A-Za-z_]+)["']$/);
           const name = strMatch?.[1].toUpperCase();
           if (!isToolType(name)) {
-            throw new Error(`tool() expects one of: ${TOOL_TYPES.map((t) => `"${t}"`).join(", ")}`);
+            throw new Error(t("err.toolArgs", { list: TOOL_TYPES.map((tt) => `"${tt}"`).join(", ") }));
           }
           steps.push({ type: "TOOL", tool: name, sourceLine: line, label: `tool("${name}")` });
         } else if (fn === "conveyor" || fn === "conveyorto") {
           const { positional } = parseNumericArgs(argsRaw);
           const d = positional[0];
           if (!Number.isFinite(d) || Math.abs(d) > 5000) {
-            throw new Error(`${callMatch[1]}(mm) expects a distance between -5000 and 5000`);
+            throw new Error(t("err.conveyorArgs", { fn: callMatch[1] }));
           }
           const absolute = fn === "conveyorto";
           steps.push({
@@ -221,10 +222,10 @@ export function compileScriptProgram(source: string): CompileResult {
           });
         } else if (fn === "conveyorauto") {
           const m = argsRaw.match(/^["'](on|off)["']\s*(?:,\s*(?:speed\s*=\s*)?([-+]?\d+(?:\.\d+)?))?$/i);
-          if (!m) throw new Error(`conveyorAuto() expects "on" or "off", e.g. conveyorAuto("on", speed=60)`);
+          if (!m) throw new Error(t("err.conveyorAutoArgs"));
           const on = m[1].toLowerCase() === "on";
           const speed = m[2] !== undefined ? Number(m[2]) : 60;
-          if (on && (speed < 5 || speed > 100)) throw new Error("conveyorAuto speed must be between 5 and 100");
+          if (on && (speed < 5 || speed > 100)) throw new Error(t("err.conveyorAutoSpeed"));
           steps.push({
             type: "CONVEYOR",
             mode: "AUTO",
@@ -234,10 +235,10 @@ export function compileScriptProgram(source: string): CompileResult {
           });
         } else if (fn === "waitsensor") {
           const m = argsRaw.match(/^(?:["'](box|clear)["'])?\s*,?\s*(?:timeout\s*=\s*)?(\d+(?:\.\d+)?)?$/i);
-          if (!m) throw new Error(`waitSensor() usage: waitSensor(), waitSensor("clear"), waitSensor(timeout=20)`);
+          if (!m) throw new Error(t("err.waitSensorUsage"));
           const until = m[1]?.toLowerCase() === "clear" ? "CLEAR" : "BLOCKED";
           const timeoutSec = m[2] !== undefined ? Number(m[2]) : 30;
-          if (timeoutSec <= 0 || timeoutSec > 300) throw new Error("waitSensor timeout must be 1-300 seconds");
+          if (timeoutSec <= 0 || timeoutSec > 300) throw new Error(t("err.waitSensorTimeout"));
           steps.push({
             type: "WAIT_SENSOR",
             until,
@@ -249,7 +250,7 @@ export function compileScriptProgram(source: string): CompileResult {
           const { positional } = parseNumericArgs(argsRaw);
           const p = positional[0];
           if (!Number.isFinite(p) || p < -100 || p > 100) {
-            throw new Error("conveyorSpeed(percent) expects a number between -100 and 100");
+            throw new Error(t("err.conveyorSpeedArgs"));
           }
           steps.push({ type: "CONVEYOR", mode: "SPEED", value: p, sourceLine: line, label: `conveyorSpeed(${p})` });
         } else if (fn === "log" || fn === "print") {
@@ -262,10 +263,10 @@ export function compileScriptProgram(source: string): CompileResult {
             label: `log("${message}")`,
           });
         } else {
-          throw new Error(`Unknown command "${callMatch[1]}"`);
+          throw new Error(t("err.unknownCommand", { name: callMatch[1] }));
         }
       } catch (err) {
-        errors.push({ line, message: err instanceof Error ? err.message : "Invalid statement" });
+        errors.push({ line, message: err instanceof Error ? err.message : t("err.invalidStatement") });
       }
 
       i++;
@@ -275,7 +276,7 @@ export function compileScriptProgram(source: string): CompileResult {
   execBlock(0, cleaned.length);
 
   if (!steps.length && !errors.length) {
-    warnings.push("Script contains no executable commands.");
+    warnings.push(t("warn.noCommandsScript"));
   }
 
   return { steps, errors, warnings };

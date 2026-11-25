@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { buildPreset } from "@/lib/sim/workcell";
 import { ROBOT_PROFILES, isRobotModelId, setActiveRobotModel, type RobotModelId } from "@/lib/robots";
 import {
   PENDING_ROBOT_MODEL_KEY,
@@ -10,6 +11,8 @@ import { useProjectStore } from "./useProjectStore";
 import { useRobotStore } from "./useRobotStore";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
+import { useWorkcellStore } from "./useWorkcellStore";
+import { t } from "@/lib/i18n";
 
 interface RobotModelState {
   /** Robot the simulator is running, or null until one has been chosen. */
@@ -37,7 +40,12 @@ export function activateRobotModel(model: RobotModelId): void {
     robot.setToolType(profile.defaultTool, { log: false });
   }
   robot.setJoints(profile.home, { syncIk: true });
-  useSerialStore.getState().appendLog({ dir: "sys", text: `Robot: ${profile.name}` });
+  // The scene is built at module load (before a robot is chosen); rebuild it for this robot's
+  // reach. A restored autosave replaces it afterwards with the user's own layout.
+  const wc = useWorkcellStore.getState();
+  const scene = buildPreset(wc.preset);
+  useWorkcellStore.setState({ ...scene, nextBoxNum: scene.boxes.length + 1, lastGraspMessage: "" });
+  useSerialStore.getState().appendLog({ dir: "sys", text: t("log.model.robot", { name: profile.name }) });
 }
 
 function readPendingModel(): RobotModelId | null {
@@ -98,7 +106,7 @@ export const useRobotModelStore = create<RobotModelState>((set, get) => ({
     }
     useSerialStore
       .getState()
-      .appendLog({ dir: "sys", text: `Switching robot to ${ROBOT_PROFILES[model].name}…` });
+      .appendLog({ dir: "sys", text: t("log.model.switching", { name: ROBOT_PROFILES[model].name }) });
     window.location.reload();
   },
 

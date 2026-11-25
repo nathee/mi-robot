@@ -3,6 +3,7 @@ import { checkWorkspaceXYZ } from "@/lib/kinematics/fk";
 import { stepsToGcode } from "./gcodeCompiler";
 import { TOOL_DEFS, type ToolType } from "@/lib/tools/toolDefs";
 import type { CompileError, CompileResult, ProgramBlock, ProgramStep } from "./types";
+import { t } from "@/lib/i18n";
 
 let blockSeq = 1;
 export function nextBlockId(): string {
@@ -55,7 +56,7 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
   const visit = (list: readonly ProgramBlock[]) => {
     for (let idx = 0; idx < list.length; idx++) {
       if (steps.length >= MAX_STEPS) {
-        errors.push({ line: idx + 1, message: `Program exceeds ${MAX_STEPS} steps` });
+        errors.push({ line: idx + 1, message: t("err.maxSteps", { n: MAX_STEPS }) });
         return;
       }
       const blk = list[idx];
@@ -69,7 +70,7 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
             if (blk.joints[j] < lim.min || blk.joints[j] > lim.max) {
               errors.push({
                 line: idx + 1,
-                message: `Block #${idx + 1}: J${j + 1}=${blk.joints[j]}° outside [${lim.min}°, ${lim.max}°]`,
+                message: t("err.blockJointRange", { i: idx + 1, j: j + 1, v: blk.joints[j], min: lim.min, max: lim.max }),
               });
               return;
             }
@@ -86,7 +87,7 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
         case "MOVE_LINEAR": {
           const ws = checkWorkspaceXYZ(blk.pose.x, blk.pose.y, blk.pose.z, DEFAULT_WORKSPACE);
           if (!ws.ok) {
-            errors.push({ line: idx + 1, message: `Block #${idx + 1}: ${ws.message}` });
+            errors.push({ line: idx + 1, message: t("err.blockWs", { i: idx + 1, reason: ws.message }) });
             return;
           }
           steps.push({
@@ -173,7 +174,7 @@ export function compileBlocksProgram(blocks: readonly ProgramBlock[]): CompileRe
 
   visit(blocks);
   if (!steps.length && !errors.length) {
-    warnings.push("Add at least one block to run.");
+    warnings.push(t("warn.addBlock"));
   }
   return { steps, errors, warnings };
 }

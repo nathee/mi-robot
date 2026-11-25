@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n/useT";
 
 function getUtcOffsetString(date: Date): string {
   const offsetMin = -date.getTimezoneOffset();
@@ -17,6 +18,7 @@ function formatClock(date: Date): string {
 }
 
 export function StatusBar() {
+  const t = useT();
   const [clock, setClock] = useState("");
   const [utcOffset, setUtcOffset] = useState("UTC");
 
@@ -38,21 +40,21 @@ export function StatusBar() {
           <kbd className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             LMB
           </kbd>
-          Orbit
+          {t("status.orbit")}
         </span>
         <span className="text-slate-300 dark:text-slate-700">·</span>
         <span className="inline-flex items-center gap-1">
           <kbd className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             RMB
           </kbd>
-          Pan
+          {t("status.pan")}
         </span>
         <span className="text-slate-300 dark:text-slate-700">·</span>
         <span className="inline-flex items-center gap-1">
           <kbd className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            Scroll
+            {t("status.scroll")}
           </kbd>
-          Zoom
+          {t("status.zoom")}
         </span>
       </div>
 
@@ -66,7 +68,7 @@ export function StatusBar() {
               rel="noopener noreferrer"
               className="hover:text-sky-600 hover:underline dark:hover:text-sky-400"
             >
-            eleccom.in.th, Thailand
+            {t("status.vendor")}
             </a>
           </span>
         </span>
