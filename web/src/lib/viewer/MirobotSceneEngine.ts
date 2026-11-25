@@ -18,7 +18,7 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { LINK_NAMES } from "@/lib/kinematics/constants";
+import { LINK_NAMES, getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { finiteOr, forwardTxRxTzRz, toolTransformMatrix } from "@/lib/kinematics/fk";
 import type { ToolType } from "@/lib/tools/toolDefs";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
@@ -42,7 +42,7 @@ import {
 } from "./framesAndLabels";
 import { createGizmoController, type GizmoController } from "./gizmos";
 import { rebuildPathVisualGroup } from "./pathVisuals";
-import { disposeObjectTree, loadMirobotSTLs } from "./stlLoader";
+import { disposeObjectTree, loadRobotMeshes } from "./stlLoader";
 import { createToolVisual, type ToolVisual } from "./toolVisuals";
 import { WorkcellView } from "./workcellVisuals";
 import { applyWorkspaceHighlight, buildWorkspaceGroup } from "./workspaceMesh";
@@ -155,7 +155,7 @@ export class MirobotSceneEngine {
     this.applyTheme();
     this.bindStoreSubscriptions();
 
-    loadMirobotSTLs(this.robotGroup).then(({ links }) => {
+    loadRobotMeshes(this.robotGroup, getActiveRobotProfile()).then(({ links }) => {
       if (this.disposed) return;
       this.linkMeshes = links;
       this.mountTool(useRobotStore.getState().toolType);

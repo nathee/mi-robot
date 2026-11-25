@@ -15,7 +15,11 @@ import {
   setActiveToolOffsetMm,
 } from "@/lib/kinematics/fk";
 import { DEFAULT_TOOL, TOOL_DEFS, toolCodeFor, type ToolType } from "@/lib/tools/toolDefs";
-import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
+import {
+  isIkResultAcceptable,
+  isOrientationBestEffort,
+  solveIKPoseCandidate,
+} from "@/lib/kinematics/ik";
 import { useSerialStore } from "./useSerialStore";
 import { useViewerStore } from "./useViewerStore";
 
@@ -147,7 +151,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     });
     useSerialStore.getState().appendLog({
       dir: "sys",
-      text: "Set Home configuration (q=[0,0,0,0,0,0])",
+      text: `Set Home configuration (q=[${homeJoints.join(",")}])`,
     });
   },
 
@@ -253,7 +257,7 @@ export const useRobotStore = create<RobotState>((set, get) => ({
       dlsConfig: viewer.dls,
     });
 
-    if (!solved || solved.err.posMm > 5 || solved.err.rotDeg > 10) {
+    if (!solved || !isIkResultAcceptable(solved.err)) {
       set({
         lastIkErr: {
           posMm: solved?.err.posMm ?? 999,
@@ -272,10 +276,14 @@ export const useRobotStore = create<RobotState>((set, get) => ({
     }
 
     const nextEePose = fkPose6DFromJointsDeg(solved.q);
+    // On a 5-DOF arm the target orientation is only matched as closely as possible; follow the
+    // pose actually reached so repeated Cartesian jogs don't accumulate an unreachable orientation.
+    const reachedPose = isOrientationBestEffort() ? { ...nextEePose } : { ...state.ikTarget };
     set({
       joints: solved.q,
       eePose: nextEePose,
-      lastValidIkPose: { ...state.ikTarget },
+      ikTarget: reachedPose,
+      lastValidIkPose: reachedPose,
       lastIkErr: {
         posMm: solved.err.posMm,
         rotDeg: solved.err.rotDeg,

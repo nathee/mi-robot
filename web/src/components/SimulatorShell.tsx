@@ -5,17 +5,20 @@ import { useCodeStore } from "@/stores/useCodeStore";
 import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useProjectStore } from "@/stores/useProjectStore";
+import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { useWorkcellStore } from "@/stores/useWorkcellStore";
 import { ControlSidebar } from "./ControlSidebar";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { HardwareModal } from "./HardwareModal";
 import { ConfirmModal, DownloadRobotModal, HistoryModal, TextPromptModal } from "./Modals";
 import { SerialConsole } from "./SerialConsole";
 import { StatusBar } from "./StatusBar";
 import { Toolbar, triggerTextDownload } from "./Toolbar";
 import { ViewerCanvas } from "./ViewerCanvas";
+import { XarmHardwareModal } from "./XarmHardwareModal";
 
 function isEditableTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -119,6 +122,7 @@ export function SimulatorShell() {
   // Global Keyboard Shortcuts (Ctrl+S save, Ctrl+B toggle panel, Path shortcuts)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (useRobotModelStore.getState().selecting) return;
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
 
@@ -265,7 +269,7 @@ export function SimulatorShell() {
   const safeSlug =
     projectName
       .replace(/[^a-zA-Z0-9._-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "mirobot-program";
+      .replace(/^_+|_+$/g, "") || `${useRobotModelStore.getState().loadedModel ?? "mirobot"}-program`;
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -426,10 +430,11 @@ export function SimulatorShell() {
         onClose={() => setHistoryModalOpen(false)}
       />
 
-      <HardwareModal
-        open={hardwareModalOpen}
-        onClose={() => setHardwareModalOpen(false)}
-      />
+      {getActiveRobotProfile().hardwareDriver === "HIWONDER_BUS_SERVO" ? (
+        <XarmHardwareModal open={hardwareModalOpen} onClose={() => setHardwareModalOpen(false)} />
+      ) : (
+        <HardwareModal open={hardwareModalOpen} onClose={() => setHardwareModalOpen(false)} />
+      )}
 
       <DownloadRobotModal
         open={downloadModalOpen}

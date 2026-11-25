@@ -1,4 +1,6 @@
 import type { Matrix3, Quaternion, Vector3 } from "three";
+import { MIROBOT_PROFILE } from "@/lib/robots/mirobot";
+import type { RobotProfile } from "@/lib/robots/types";
 
 export interface JointLimit {
   min: number;
@@ -110,50 +112,43 @@ export interface PathProgramSettings {
   monitorJoint: number;
 }
 
-export const HOME_JOINTS: readonly number[] = [0, 0, 0, 0, 0, 0];
+/*
+ * Robot-specific constants are ES-module *live bindings*: they hold the active robot profile's
+ * values and are reassigned by applyRobotProfile(). Every importer (FK/IK, validators, viewer)
+ * therefore follows the robot chosen on the selection screen. They default to the WLKATA Mirobot.
+ * Always read them at call time; never cache them in module-level variables.
+ */
+let activeProfile: RobotProfile = MIROBOT_PROFILE;
+
+export let HOME_JOINTS: readonly number[] = MIROBOT_PROFILE.home;
 
 export const LINK_NAMES = ["link1", "link2", "link3", "link4", "link5", "link6"] as const;
 export type LinkName = (typeof LINK_NAMES)[number];
 
-export const JOINT_LABELS = [
-  "J1 (Base)",
-  "J2 (Shoulder)",
-  "J3 (Elbow)",
-  "J4 (Wrist Pitch)",
-  "J5 (Wrist Roll)",
-  "J6 (Tool)",
-] as const;
+export let JOINT_LABELS: readonly string[] = MIROBOT_PROFILE.jointLabels;
 
-export const JOINT_LIMITS: readonly JointLimit[] = [
-  { min: -100, max: 160 }, // J1 base
-  { min: -40, max: 70 }, // J2 shoulder
-  { min: -170, max: 60 }, // J3 elbow
-  { min: -170, max: 170 }, // J4 wrist pitch
-  { min: -180, max: 36 }, // J5 wrist roll
-  { min: -180, max: 180 }, // J6 tool rotation
-];
+export let JOINT_LIMITS: readonly JointLimit[] = MIROBOT_PROFILE.jointLimits;
 
-export const MDH_PARAMS: readonly MdhParam[] = [
-  { i: 1, alpha: 0, a: 0, d: 127, thetaOffset: 0 },
-  { i: 2, alpha: -Math.PI / 2, a: 29.69, d: 0, thetaOffset: -Math.PI / 2 },
-  { i: 3, alpha: 0, a: 108, d: 0, thetaOffset: 0 },
-  { i: 4, alpha: -Math.PI / 2, a: 20, d: 168.98, thetaOffset: 0 },
-  { i: 5, alpha: Math.PI / 2, a: 0, d: 0, thetaOffset: Math.PI / 2 },
-  { i: 6, alpha: Math.PI / 2, a: 0, d: -24.28, thetaOffset: 0 },
-];
+export let MDH_PARAMS: readonly MdhParam[] = MIROBOT_PROFILE.mdhParams;
 
-export const DEFAULT_WORKSPACE: WorkspaceConfig = {
-  xMin: -325.62,
-  xMax: 325.62,
-  yMin: -325.62,
-  yMax: 325.62,
-  zMin: 30.5,
-  zMax: 429.4,
-  radiusMin: 80,
-  radiusMax: 325.62,
-  baseMinDeg: -110,
-  baseMaxDeg: 160,
-};
+export let DEFAULT_WORKSPACE: WorkspaceConfig = MIROBOT_PROFILE.workspace;
+
+export let STL_MESH_COLORS: Record<string, number> = MIROBOT_PROFILE.meshColors;
+
+export function getActiveRobotProfile(): RobotProfile {
+  return activeProfile;
+}
+
+/** Points every robot-specific constant above at `profile`. */
+export function applyRobotProfile(profile: RobotProfile): void {
+  activeProfile = profile;
+  HOME_JOINTS = profile.home;
+  JOINT_LABELS = profile.jointLabels;
+  JOINT_LIMITS = profile.jointLimits;
+  MDH_PARAMS = profile.mdhParams;
+  DEFAULT_WORKSPACE = profile.workspace;
+  STL_MESH_COLORS = profile.meshColors;
+}
 
 export const DEFAULT_DLS_CONFIG: DlsConfig = {
   maxIter: 100,
@@ -179,14 +174,4 @@ export const DEFAULT_PATH_PROGRAM_SETTINGS: PathProgramSettings = {
   fixedDurationSec: 2,
   trapezoidAccelPercent: 25,
   monitorJoint: 0,
-};
-
-export const STL_MESH_COLORS: Record<string, number> = {
-  base: 0x616161,
-  link1: 0xbdbdbd,
-  link2: 0xf57c00,
-  link3: 0xbdbdbd,
-  link4: 0xf57c00,
-  link5: 0xbdbdbd,
-  link6: 0xbdbdbd,
 };

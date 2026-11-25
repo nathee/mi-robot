@@ -2,6 +2,7 @@ import { MathUtils, Matrix3, Vector3 } from "three";
 import {
   DEFAULT_DLS_CONFIG,
   MDH_PARAMS,
+  getActiveRobotProfile,
   type DlsConfig,
   type IkBranchMode,
   type IkErrorMetrics,
@@ -21,12 +22,15 @@ import {
   wrapRad,
 } from "./fk";
 
-const GEO = {
-  h1: MDH_PARAMS[0].d, // d1 = 127 mm
-  l1: MDH_PARAMS[1].a, // a2 = 29.69 mm
-  l2: MDH_PARAMS[2].a, // a3 = 108 mm
-  l3: Math.hypot(MDH_PARAMS[3].a, MDH_PARAMS[3].d), // combine a4 & d4
-};
+/** Mirobot arm geometry, read from the active profile at call time (Mirobot: 127 / 29.69 / 108 / a4⊕d4). */
+function geo() {
+  return {
+    h1: MDH_PARAMS[0].d,
+    l1: MDH_PARAMS[1].a,
+    l2: MDH_PARAMS[2].a,
+    l3: Math.hypot(MDH_PARAMS[3].a, MDH_PARAMS[3].d),
+  };
+}
 
 function clampUnit(x: number): number {
   return Math.min(1, Math.max(-1, x));
@@ -378,6 +382,7 @@ export function solveIK_AnalyticOnce(
   const x = pw.x * 1000;
   const y = pw.y * 1000;
   const z = pw.z * 1000;
+  const GEO = geo();
   const q1 = Math.atan2(y, x);
   const V = Math.sqrt(x * x + y * y) - GEO.l1;
   const S = z - GEO.h1;
@@ -402,6 +407,90 @@ function normalizeBranchMode(branchMode: IkBranchMode): "CLOSEST" | "ELBOW_POS" 
   return "CLOSEST";
 }
 
+/**
+ * Closed-form IK for a 5-DOF arm with a vertical base yaw (J1), three parallel pitch joints
+ * (J2..J4, 0° = straight up, positive = lean outwards) and a wrist roll (J5) — the Hiwonder xArm.
+ *
+ * A 5-DOF arm cannot reach an arbitrary 6D pose: the approach axis must lie in the vertical
+ * plane through the base axis. The target's approach axis is projected into that plane, so the
+ * result is exact for reachable poses and the closest pitch/roll match otherwise.
+ *
+ * @param baseFlip  0 = face the target, 1 = reach over the top (J1 + 180°)
+ * @param elbowSign +1 / -1 picks the elbow branch
+ */
+export function solveIK_Planar5Once(
+  target: TargetPoseMatrix,
+  elbowSign: number,
+  baseFlip: 0 | 1 = 0
+): number[] | null {
+  const d1 = MDH_PARAMS[0].d / 1000;
+  const L2 = MDH_PARAMS[2].a / 1000;
+  const L3 = MDH_PARAMS[3].a / 1000;
+  const wristToTcp = -MDH_PARAMS[5].d / 1000 + getActiveToolOffsetMm() / 1000;
+
+  // Gripper approach direction = link6 -Z
+  const approach = new Vector3(0, 0, -1).applyMatrix3(target.R).normalize();
+  const p = target.p;
+
+  let q1 = Math.hypot(p.x, p.y) > 1e-6 ? Math.atan2(p.y, p.x) : Math.atan2(approach.y, approach.x);
+  if (baseFlip) q1 = wrapRad(q1 + Math.PI);
+  const u = new Vector3(Math.cos(q1), Math.sin(q1), 0);
+
+  // Pitch of the approach axis measured from vertical, positive towards +u
+  const pitch = Math.atan2(approach.dot(u), approach.z);
+  const g = new Vector3().addScaledVector(u, Math.sin(pitch)).add(new Vector3(0, 0, Math.cos(pitch)));
+
+  const w = p.clone().addScaledVector(g, -wristToTcp);
+  const r = w.dot(u);
+  const s = w.z - d1;
+  const c3 = (r * r + s * s - L2 * L2 - L3 * L3) / (2 * L2 * L3);
+  if (c3 > 1 + 1e-6 || c3 < -1 - 1e-6) return null;
+  const q3 = elbowSign * Math.acos(clampUnit(c3));
+  const q2 = Math.atan2(r, s) - Math.atan2(L3 * Math.sin(q3), L2 + L3 * Math.cos(q3));
+  const q4 = pitch - q2 - q3;
+
+  const deg = (rad: number) => wrapDeg((rad * 180) / Math.PI);
+  const q = [deg(q1), deg(q2), deg(q3), deg(q4), 0, 0];
+
+  // Wrist roll: residual rotation about the flange Z axis
+  const Ts = forwardTxRxTzRz(q);
+  const Rcur = new Matrix3().setFromMatrix4(Ts[5]);
+  const Rrel = Rcur.clone().transpose().multiply(target.R).elements;
+  q[4] = deg(Math.atan2(Rrel[1], Rrel[0]));
+
+  return q.map((v, i) => clampJointValue(i, v));
+}
+
+function solveIK_Planar5Best(
+  seedQDeg: readonly number[],
+  targPose: TargetPoseMatrix,
+  branchMode: IkBranchMode
+): {
+  q: number[];
+  err: IkErrorMetrics;
+  score: number;
+  b: { g2: number; gw: number; ds: number };
+} | null {
+  const normalizedBranch = normalizeBranchMode(branchMode);
+  const elbowSigns =
+    normalizedBranch === "ELBOW_POS" ? [1] : normalizedBranch === "ELBOW_NEG" ? [-1] : [1, -1];
+  let best: ReturnType<typeof solveIK_Planar5Best> = null;
+  for (const g2 of elbowSigns) {
+    for (const flip of [0, 1] as const) {
+      const q = solveIK_Planar5Once(targPose, g2, flip);
+      if (!q) continue;
+      const err = ikErrorForQ(q, targPose);
+      const travel = q.reduce(
+        (sum, value, index) => sum + Math.abs(wrapDeg(value - finiteOr(seedQDeg[index], value))),
+        0
+      );
+      const score = err.posMm + 0.5 * err.rotDeg + travel * 0.02;
+      if (!best || score < best.score) best = { q, err, score, b: { g2, gw: 1, ds: flip ? -1 : 1 } };
+    }
+  }
+  return best;
+}
+
 export function solveIK_AnalyticBest(
   seedQDeg: readonly number[],
   targPose: TargetPoseMatrix,
@@ -412,6 +501,9 @@ export function solveIK_AnalyticBest(
   score: number;
   b: { g2: number; gw: number; ds: number };
 } | null {
+  if (getActiveRobotProfile().analyticIk === "PLANAR_5DOF") {
+    return solveIK_Planar5Best(seedQDeg, targPose, branchMode);
+  }
   const normalizedBranch = normalizeBranchMode(branchMode);
   const gamma2s =
     normalizedBranch === "ELBOW_POS"
@@ -524,4 +616,24 @@ export function solveIKPoseCandidate(
   }
 
   return chooseBestIKCandidate(candidates, seedQDeg, target);
+}
+
+/** True when the active robot has fewer than 6 DOF, so only "closest reachable" orientation exists. */
+export function isOrientationBestEffort(): boolean {
+  return getActiveRobotProfile().activeJointCount < 6;
+}
+
+/**
+ * Accepts an IK result within the position tolerance, and within the rotation tolerance on
+ * 6-DOF arms. A 5-DOF arm cannot match every orientation, so there the rotation residual
+ * is the closest reachable orientation, not a failure.
+ */
+export function isIkResultAcceptable(
+  err: IkErrorMetrics | null | undefined,
+  posTolMm = 5,
+  rotTolDeg = 10
+): boolean {
+  if (!err) return false;
+  if (err.posMm > posTolMm) return false;
+  return isOrientationBestEffort() || err.rotDeg <= rotTolDeg;
 }

@@ -23,7 +23,11 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import type { MotionType, TrajectoryProfileType } from "@/lib/kinematics/constants";
+import {
+  getActiveRobotProfile,
+  type MotionType,
+  type TrajectoryProfileType,
+} from "@/lib/kinematics/constants";
 import {
   pathTrajectoryEquation,
   TRAJECTORY_PROFILES,
@@ -610,7 +614,7 @@ export function PathPanel({
                   onChange={(e) => updateSettings({ monitorJoint: Number(e.target.value) })}
                   className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] dark:border-slate-700 dark:bg-slate-900"
                 >
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                  {Array.from({ length: getActiveRobotProfile().activeJointCount }, (_, i) => i).map((i) => (
                     <option key={i} value={i}>
                       J{i + 1}
                     </option>

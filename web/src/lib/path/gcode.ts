@@ -15,7 +15,7 @@ import {
   fkPose6DFromJointsDeg,
   pose6DToTargetMatrix,
 } from "../kinematics/fk";
-import { solveIKPoseCandidate } from "../kinematics/ik";
+import { isIkResultAcceptable, solveIKPoseCandidate } from "../kinematics/ik";
 import { APP_NAME } from "@/lib/appConfig";
 
 const NUMBER_PATTERN = "[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?";
@@ -459,7 +459,7 @@ export function parseGcodePathProgram(
         throw new Error(`Line ${cmd.lineNumber} (${name}): ${ws.message}`);
       }
       const solved = solveIKPoseCandidate(currentJoints, pose6DToTargetMatrix(nextPose), solver);
-      if (!solved || solved.err.posMm > 5 || solved.err.rotDeg > 10) {
+      if (!solved || !isIkResultAcceptable(solved.err)) {
         throw new Error(`Line ${cmd.lineNumber} (${name}): IK solution not found`);
       }
       currentJoints = solved.q;

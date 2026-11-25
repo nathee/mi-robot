@@ -5,7 +5,13 @@ import type { GripperState } from "@/lib/program/types";
  * TCP offsets are approximate (measured outward from the link6 flange, along link6 -Z)
  * and can be tuned here without touching any other code.
  */
-export type ToolType = "NONE" | "SUCTION" | "TWO_FINGER" | "THREE_FINGER_SOFT" | "MICRO_SERVO";
+export type ToolType =
+  | "NONE"
+  | "SUCTION"
+  | "TWO_FINGER"
+  | "THREE_FINGER_SOFT"
+  | "MICRO_SERVO"
+  | "XARM_GRIPPER";
 
 export const TOOL_TYPES: readonly ToolType[] = [
   "NONE",
@@ -13,6 +19,7 @@ export const TOOL_TYPES: readonly ToolType[] = [
   "TWO_FINGER",
   "THREE_FINGER_SOFT",
   "MICRO_SERVO",
+  "XARM_GRIPPER",
 ];
 
 export const DEFAULT_TOOL: ToolType = "TWO_FINGER";
@@ -108,6 +115,20 @@ export const TOOL_DEFS: Record<ToolType, ToolDef> = {
     grabLabel: "Grab",
     releaseLabel: "Open",
   },
+  XARM_GRIPPER: {
+    type: "XARM_GRIPPER",
+    label: "xArm Servo Gripper",
+    shortLabel: "xArm Grip",
+    description: "Hiwonder xArm built-in bus-servo gripper (servo ID 1). M3 S40 = grab, M3 S60 = open.",
+    tcpOffsetMm: 60,
+    graspRadiusMm: 10,
+    graspHeightTolMm: 18,
+    maxObjectSizeMm: 30,
+    grabCode: "M3 S40",
+    releaseCode: "M3 S60",
+    grabLabel: "Grab",
+    releaseLabel: "Open",
+  },
 };
 
 export function isToolType(value: unknown): value is ToolType {
@@ -159,6 +180,7 @@ export function interpretToolCommand(
         ? { state: "CLOSE", pwm: s, label: `Suction ON (M3 S${s})` }
         : { state: "OPEN", pwm: s, label: `Air Blow / Release (M3 S${s})` };
     case "MICRO_SERVO":
+    case "XARM_GRIPPER":
       return s <= 50
         ? { state: "CLOSE", pwm: s, label: `Servo Gripper GRAB (M3 S${s})` }
         : { state: "OPEN", pwm: s, label: `Servo Gripper OPEN (M3 S${s})` };

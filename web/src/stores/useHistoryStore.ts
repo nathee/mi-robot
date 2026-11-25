@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { isToolType } from "@/lib/tools/toolDefs";
 import { useWorkcellStore } from "./useWorkcellStore";
 import { clonePathTarget, normalizePathProgramSettings } from "@/lib/path/gcode";
@@ -48,6 +49,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
     return {
       projectName: project.name,
+      robotModel: getActiveRobotProfile().id,
       joints: robot.joints.slice(),
       gripperState: robot.gripperState,
       toolType: robot.toolType,
@@ -114,7 +116,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const entries = loadHistoryFromStorage();
     const draft = loadAutosaveFromStorage();
 
-    if (draft) {
+    if (draft && (draft.robotModel ?? "mirobot") === getActiveRobotProfile().id) {
       get().applySnapshot(draft, `Restored previous session "${draft.projectName}"`);
     }
 

@@ -8,7 +8,7 @@ import {
   pose6DToTargetMatrix,
   targetMatrixFromPositionQuaternion,
 } from "@/lib/kinematics/fk";
-import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
+import { isIkResultAcceptable, solveIKPoseCandidate } from "@/lib/kinematics/ik";
 import { pathTrajectorySample } from "@/lib/path/trajectory";
 import {
   blocksToGcode,
@@ -631,7 +631,7 @@ export const useCodeStore = create<CodeState>((set, get) => ({
       const solved = solveIKPoseCandidate(robot.joints, desired, viewer.ikSolver, {
         dlsConfig: viewer.dls,
       });
-      if (!solved || solved.err.posMm > 5 || solved.err.rotDeg > 12) {
+      if (!solved || !isIkResultAcceptable(solved.err, 5, 12)) {
         set({ status: "ERROR", runtime: null });
         logCode(`IK failed during step "${step.label}"`, "error");
         return;

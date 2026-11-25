@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeftRight,
   Bot,
   Cable,
   Check,
@@ -26,7 +27,10 @@ import { useHardwareStore } from "@/stores/useHardwareStore";
 import { useHistoryStore } from "@/stores/useHistoryStore";
 import { usePathStore } from "@/stores/usePathStore";
 import { useProjectStore } from "@/stores/useProjectStore";
+import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useRobotStore } from "@/stores/useRobotStore";
+import { useXarmLinkStore } from "@/stores/useXarmLinkStore";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useThemeStore, type ThemeMode } from "@/stores/useThemeStore";
 import { APP_NAME } from "@/lib/appConfig";
@@ -82,7 +86,11 @@ export function Toolbar({
 
   const historyCount = useHistoryStore((s) => s.entries.length);
   const saveToHistory = useHistoryStore((s) => s.saveToHistory);
-  const hwConnected = useHardwareStore((s) => s.connected);
+  const robotProfile = getActiveRobotProfile();
+  const isBusServo = robotProfile.hardwareDriver === "HIWONDER_BUS_SERVO";
+  const rs485Connected = useHardwareStore((s) => s.connected);
+  const xarmConnected = useXarmLinkStore((s) => s.connected);
+  const hwConnected = isBusServo ? xarmConnected : rs485Connected;
   const hwRxCount = useHardwareStore((s) => s.rxCount);
 
   const targetsCount = usePathStore((s) => s.targets.length);
@@ -184,6 +192,16 @@ export function Toolbar({
 
         <button
           type="button"
+          onClick={() => useRobotModelStore.getState().openSelector()}
+          title={`${robotProfile.name} — click to switch robot arm`}
+          className="inline-flex min-w-0 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
+        >
+          <ArrowLeftRight className="h-3 w-3 shrink-0" />
+          <span className="max-w-28 truncate">{robotProfile.name.replace(/^(WLKATA|Hiwonder) /, "")}</span>
+        </button>
+
+        <button
+          type="button"
           onClick={onRequestRenameProject}
           title="Click to rename project"
           className="group inline-flex min-w-0 items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-200/80 hover:bg-slate-50 dark:text-slate-200 dark:hover:border-slate-700/80 dark:hover:bg-slate-800/70"
@@ -215,7 +233,7 @@ export function Toolbar({
         <button
           type="button"
           onClick={onRequestOpenHardware}
-          title="Connect USB-RS485 or ESP32 Wi-Fi"
+          title={isBusServo ? "Connect the real arm over USB" : "Connect USB-RS485 or ESP32 Wi-Fi"}
           className={`inline-flex h-8.5 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition ${
             hwConnected
               ? "border-emerald-500/40 bg-emerald-500/12 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
@@ -228,8 +246,8 @@ export function Toolbar({
             }`}
           />
           <Cable className="h-3.5 w-3.5" />
-          <span className="hidden lg:inline">RS485</span>
-          {hwConnected && hwRxCount > 0 && (
+          <span className="hidden lg:inline">{isBusServo ? "Real arm" : "RS485"}</span>
+          {hwConnected && !isBusServo && hwRxCount > 0 && (
             <span className="font-mono text-[10px] tabular-nums opacity-80">{hwRxCount}</span>
           )}
         </button>
@@ -373,7 +391,7 @@ export function Toolbar({
             cancelPath();
             setHome();
           }}
-          title="Return robot to Home position (0, 0, 0, 0, 0, 0)"
+          title={`Return robot to Home position (${robotProfile.home.join(", ")})`}
           className="inline-flex h-8.5 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 text-xs font-semibold text-white shadow-xs transition hover:bg-sky-500"
         >
           <Home className="h-3.5 w-3.5" />

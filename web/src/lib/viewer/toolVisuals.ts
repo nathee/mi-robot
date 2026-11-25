@@ -211,6 +211,7 @@ export function createToolVisual(type: ToolType): ToolVisual {
       visual = buildSuction();
       break;
     case "TWO_FINGER":
+    case "XARM_GRIPPER":
       visual = buildTwoFinger();
       break;
     case "THREE_FINGER_SOFT":

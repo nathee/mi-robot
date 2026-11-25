@@ -2,13 +2,63 @@ import type { PathProgramSettings, PathTarget } from "@/lib/kinematics/constants
 import type { CodeEditorMode, GripperState, ProgramBlock } from "@/lib/program/types";
 import type { ToolType } from "@/lib/tools/toolDefs";
 import type { WorkcellSnapshot } from "@/lib/sim/workcell";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
+import { isRobotModelId, type RobotModelId } from "@/lib/robots";
 
 export const AUTOSAVE_STORAGE_KEY = "mirobot:autosave:v1";
 export const HISTORY_STORAGE_KEY = "mirobot:history:v1";
 export const MAX_HISTORY_ENTRIES = 30;
+export const ROBOT_MODEL_STORAGE_KEY = "mirobot:robot-model:v1";
+/** sessionStorage: model to open straight away after a robot switch reloads the page. */
+export const PENDING_ROBOT_MODEL_KEY = "mirobot:robot-model:pending";
+
+/**
+ * Each robot keeps its own session draft and history (programs are tied to a robot's links
+ * and limits). The Mirobot keeps the original keys so existing sessions survive the upgrade.
+ */
+export function autosaveStorageKey(model: RobotModelId = getActiveRobotProfile().id): string {
+  return model === "mirobot" ? AUTOSAVE_STORAGE_KEY : `${AUTOSAVE_STORAGE_KEY}:${model}`;
+}
+
+export function historyStorageKey(model: RobotModelId = getActiveRobotProfile().id): string {
+  return model === "mirobot" ? HISTORY_STORAGE_KEY : `${HISTORY_STORAGE_KEY}:${model}`;
+}
+
+export interface RobotModelPreference {
+  model: RobotModelId;
+  /** Skip the selection screen and open this robot directly. */
+  remember: boolean;
+}
+
+export function loadRobotModelPreference(storage?: Storage): RobotModelPreference | null {
+  const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+  if (!store) return null;
+  try {
+    const raw = store.getItem(ROBOT_MODEL_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<RobotModelPreference>;
+    if (!isRobotModelId(parsed?.model)) return null;
+    return { model: parsed.model, remember: parsed.remember === true };
+  } catch {
+    return null;
+  }
+}
+
+export function saveRobotModelPreference(pref: RobotModelPreference, storage?: Storage): boolean {
+  const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
+  if (!store) return false;
+  try {
+    store.setItem(ROBOT_MODEL_STORAGE_KEY, JSON.stringify(pref));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface WorkspaceSnapshotData {
   projectName: string;
+  /** Robot the snapshot was made with. Missing = saved before robot selection existed (Mirobot). */
+  robotModel?: RobotModelId;
   joints: number[];
   gripperState: GripperState;
   /** Optional for snapshots saved before end-effectors were selectable. */
@@ -48,7 +98,7 @@ export function loadAutosaveFromStorage(storage?: Storage): WorkspaceSnapshotDat
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return null;
   try {
-    const raw = store.getItem(AUTOSAVE_STORAGE_KEY);
+    const raw = store.getItem(autosaveStorageKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return isValidSnapshotData(parsed) ? parsed : null;
@@ -61,7 +111,7 @@ export function clearAutosaveFromStorage(storage?: Storage): boolean {
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return false;
   try {
-    store.removeItem(AUTOSAVE_STORAGE_KEY);
+    store.removeItem(autosaveStorageKey());
     return true;
   } catch {
     return false;
@@ -72,7 +122,7 @@ export function saveAutosaveToStorage(data: WorkspaceSnapshotData, storage?: Sto
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return false;
   try {
-    store.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(data));
+    store.setItem(autosaveStorageKey(), JSON.stringify(data));
     return true;
   } catch {
     return false;
@@ -83,7 +133,7 @@ export function loadHistoryFromStorage(storage?: Storage): WorkspaceHistoryEntry
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return [];
   try {
-    const raw = store.getItem(HISTORY_STORAGE_KEY);
+    const raw = store.getItem(historyStorageKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -106,7 +156,7 @@ export function saveHistoryToStorage(
   const store = storage ?? (typeof window !== "undefined" ? window.localStorage : undefined);
   if (!store) return false;
   try {
-    store.setItem(HISTORY_STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_HISTORY_ENTRIES)));
+    store.setItem(historyStorageKey(), JSON.stringify(entries.slice(0, MAX_HISTORY_ENTRIES)));
     return true;
   } catch {
     return false;

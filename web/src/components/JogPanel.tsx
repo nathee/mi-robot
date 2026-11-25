@@ -2,21 +2,18 @@
 
 import { useRef } from "react";
 import { AlertTriangle, Crosshair, Minus, Plus, RotateCcw, Sparkles } from "lucide-react";
-import { JOINT_LIMITS, type Pose6D } from "@/lib/kinematics/constants";
+import { JOINT_LABELS, JOINT_LIMITS, getActiveRobotProfile, type Pose6D } from "@/lib/kinematics/constants";
+
+/** "J2 (Shoulder)" -> "Shoulder" */
+function jointShortName(i: number): string {
+  return /\((.*)\)/.exec(JOINT_LABELS[i] ?? "")?.[1] ?? `Joint ${i + 1}`;
+}
 import { usePathStore } from "@/stores/usePathStore";
 import { useRobotStore } from "@/stores/useRobotStore";
 import { useSerialStore } from "@/stores/useSerialStore";
 import { useViewerStore } from "@/stores/useViewerStore";
 import { NumericInput } from "./ui";
 
-const JOINT_SHORT_NAMES = ["Base", "Shoulder", "Elbow", "Wrist Pitch", "Wrist Roll", "Tool"] as const;
-
-const PRESET_POSES: Array<{ label: string; joints: number[] }> = [
-  { label: "Home", joints: [0, 0, 0, 0, 0, 0] },
-  { label: "Ready", joints: [0, 15, -20, 0, -25, 0] },
-  { label: "Reach", joints: [30, 32, -25, 0, -10, 0] },
-  { label: "Pick", joints: [-35, 28, -32, 0, -18, 0] },
-];
 
 const POSITION_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; step: number; badge: string }> = [
   { key: "x", label: "X", unit: "mm", step: 5, badge: "bg-rose-500/12 text-rose-600 dark:text-rose-400" },
@@ -31,6 +28,7 @@ const ORIENTATION_AXES: Array<{ key: keyof Pose6D; label: string; unit: string; 
 ];
 
 export function JogPanel() {
+  const { activeJointCount, jogPresets } = getActiveRobotProfile();
   const joints = useRobotStore((s) => s.joints);
   const ikTarget = useRobotStore((s) => s.ikTarget);
   const lastIkErr = useRobotStore((s) => s.lastIkErr);
@@ -159,7 +157,7 @@ export function JogPanel() {
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
           }`}
         >
-          Joints (J1–J6)
+          Joints (J1–J{activeJointCount})
         </button>
         <button
           type="button"
@@ -181,11 +179,11 @@ export function JogPanel() {
           <span>Quick Poses</span>
         </div>
         <div className="grid grid-cols-4 gap-2">
-          {PRESET_POSES.map((preset) => (
+          {jogPresets.map((preset) => (
             <button
               key={preset.label}
               type="button"
-              onClick={() => applyPreset(preset.label, preset.joints)}
+              onClick={() => applyPreset(preset.label, preset.joints.slice())}
               className="rounded-xl border border-slate-200/80 bg-white py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-sky-400/70 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-800 dark:bg-slate-900/75 dark:text-slate-200 dark:hover:border-sky-500/60 dark:hover:bg-sky-950/50 dark:hover:text-sky-300"
             >
               {preset.label}
@@ -208,11 +206,11 @@ export function JogPanel() {
           <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             <span>Joint Angles (°)</span>
             <span className="font-normal normal-case tracking-normal text-slate-400">
-              Click J1–J6 to zero
+              Click J1–J{activeJointCount} to zero
             </span>
           </div>
           <div className="space-y-2">
-            {JOINT_LIMITS.map((limit, i) => {
+            {JOINT_LIMITS.slice(0, activeJointCount).map((limit, i) => {
               const val = joints[i] ?? 0;
               const isZero = Math.abs(val) < 0.05;
               return (
@@ -236,7 +234,7 @@ export function JogPanel() {
                         {!isZero && <RotateCcw className="h-2.5 w-2.5 opacity-70" />}
                       </button>
                       <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
-                        {JOINT_SHORT_NAMES[i]}
+                        {jointShortName(i)}
                       </span>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">

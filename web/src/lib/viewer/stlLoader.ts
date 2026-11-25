@@ -7,6 +7,8 @@ import {
 } from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { LINK_NAMES, STL_MESH_COLORS } from "@/lib/kinematics/constants";
+import type { RobotProfile } from "@/lib/robots/types";
+import { buildPrimitiveRobot } from "./primitiveRobot";
 
 export interface LoadedRobotMeshes {
   base: Object3D;
@@ -85,4 +87,12 @@ export function disposeObjectTree(root: Object3D | null | undefined): void {
       anyMat.dispose?.();
     });
   });
+}
+
+/** Loads the active robot's 3D model: STL meshes when the profile has them, primitives otherwise. */
+export function loadRobotMeshes(targetGroup: Group, profile: RobotProfile): Promise<LoadedRobotMeshes> {
+  if (profile.meshSource === "stl") {
+    return loadMirobotSTLs(targetGroup, profile.stlDir ?? "/models");
+  }
+  return Promise.resolve(buildPrimitiveRobot(targetGroup, profile));
 }

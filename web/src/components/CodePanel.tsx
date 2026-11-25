@@ -31,7 +31,8 @@ import { nextBlockId } from "@/lib/program/blocks";
 import { SAMPLE_GCODE_PROGRAMS } from "@/lib/program/gcodeCompiler";
 import { SAMPLE_SCRIPTS } from "@/lib/program/scriptCompiler";
 import type { CodeEditorMode, ProgramBlock } from "@/lib/program/types";
-import { TOOL_DEFS, TOOL_TYPES, type ToolType } from "@/lib/tools/toolDefs";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
+import { TOOL_DEFS, type ToolType } from "@/lib/tools/toolDefs";
 import { useCodeStore } from "@/stores/useCodeStore";
 import { useProjectStore } from "@/stores/useProjectStore";
 import { useRobotStore } from "@/stores/useRobotStore";
@@ -455,7 +456,7 @@ function BlockCard({
             }
             className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs outline-none dark:border-slate-700 dark:bg-slate-950"
           >
-            {TOOL_TYPES.map((t) => (
+            {getActiveRobotProfile().allowedTools.map((t) => (
               <option key={t} value={t}>
                 {TOOL_DEFS[t].label}
               </option>

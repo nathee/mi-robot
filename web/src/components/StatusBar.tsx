@@ -58,23 +58,6 @@ export function StatusBar() {
 
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2.5 sm:flex-initial">
         <span className="truncate">
-          <a
-            href="https://www.wlkata.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-sky-600 hover:underline dark:hover:text-sky-400"
-          >
-            WLKATA Robotics
-          </a>
-          {" · "}
-          <a
-            href="https://www.inex.co.th/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-sky-600 hover:underline dark:hover:text-sky-400"
-          >
-            inex
-          </a>
           <span className="hidden md:inline">
             {" · "}
             <a
@@ -83,7 +66,7 @@ export function StatusBar() {
               rel="noopener noreferrer"
               className="hover:text-sky-600 hover:underline dark:hover:text-sky-400"
             >
-              Eleccom, Thailand
+            eleccom.in.th, Thailand
             </a>
           </span>
         </span>

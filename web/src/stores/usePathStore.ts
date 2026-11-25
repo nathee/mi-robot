@@ -9,7 +9,7 @@ import {
   clampJointsToLimits,
   fkPose6DFromJointsDeg,
 } from "@/lib/kinematics/fk";
-import { solveIKPoseCandidate } from "@/lib/kinematics/ik";
+import { isIkResultAcceptable, solveIKPoseCandidate } from "@/lib/kinematics/ik";
 import {
   clonePathTarget,
   exportPathProgramGcode,
@@ -598,7 +598,7 @@ export const usePathStore = create<PathState>((set, get) => ({
         dlsConfig: viewer.dls,
       });
 
-      if (!solved || solved.err.posMm > 5 || solved.err.rotDeg > 10) {
+      if (!solved || !isIkResultAcceptable(solved.err)) {
         set({ status: "ERROR" });
         logPath(
           `IK failed during ${ctx.label} (${(solved?.err.posMm ?? 999).toFixed(2)} mm)`,

@@ -24,9 +24,9 @@ import {
   type ReachStatus,
   type WorkcellPresetId,
 } from "@/lib/sim/workcell";
+import { getActiveRobotProfile } from "@/lib/kinematics/constants";
 import {
   TOOL_DEFS,
-  TOOL_TYPES,
   toolCodeFor,
   type ToolType,
 } from "@/lib/tools/toolDefs";
@@ -42,6 +42,7 @@ const TOOL_ICONS: Record<ToolType, string> = {
   TWO_FINGER: "⫴",
   THREE_FINGER_SOFT: "✣",
   MICRO_SERVO: "⋔",
+  XARM_GRIPPER: "⫴",
 };
 
 const BTN =
@@ -183,7 +184,7 @@ export function ToolPanel() {
             title="End-Effector"
           >
             <div className="space-y-2">
-              {TOOL_TYPES.map((t) => {
+              {getActiveRobotProfile().allowedTools.map((t) => {
                 const d = TOOL_DEFS[t];
                 const active = t === toolType;
                 return (
