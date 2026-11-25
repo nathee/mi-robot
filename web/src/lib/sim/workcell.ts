@@ -149,18 +149,44 @@ export function isSensorBlocked(
   sensor: LightSensorConfig,
   boxes: readonly WorkBox[]
 ): boolean {
-  if (!sensor.enabled) return false;
+  return boxAtSensor(c, sensor, boxes) !== null;
+}
+
+/** The box crossing the light beam (see isSensorBlocked), or null when the beam is clear. */
+export function boxAtSensor(
+  c: ConveyorConfig,
+  sensor: LightSensorConfig,
+  boxes: readonly WorkBox[]
+): WorkBox | null {
+  if (!sensor.enabled) return null;
   const beam = conveyorExtent(c).min + sensor.offsetMm;
   const beamZ = c.topZ + SENSOR_BEAM_HEIGHT_MM;
-  return boxes.some((b) => {
-    if (Math.abs(along(c, b) - beam) > b.size / 2) return false;
-    if (isOnConveyor(c, b)) return true;
-    return (
-      Boolean(b.held) &&
-      Math.abs(acrossOffset(c, b)) <= c.widthMm / 2 + b.size / 2 &&
-      Math.abs(b.z - beamZ) <= b.size / 2
-    );
-  });
+  return (
+    boxes.find((b) => {
+      if (Math.abs(along(c, b) - beam) > b.size / 2) return false;
+      if (isOnConveyor(c, b)) return true;
+      return (
+        Boolean(b.held) &&
+        Math.abs(acrossOffset(c, b)) <= c.widthMm / 2 + b.size / 2 &&
+        Math.abs(b.z - beamZ) <= b.size / 2
+      );
+    }) ?? null
+  );
+}
+
+/** Names for BOX_COLORS, used by the `COLOR?` reply so a controller can sort by colour. */
+const BOX_COLOR_NAMES: Record<string, string> = {
+  "#ef4444": "RED",
+  "#3b82f6": "BLUE",
+  "#22c55e": "GREEN",
+  "#f59e0b": "AMBER",
+  "#a855f7": "PURPLE",
+  "#14b8a6": "TEAL",
+};
+
+/** Colour name of a box (RED, BLUE, ...), or its hex code for a custom colour. */
+export function boxColorName(color: string): string {
+  return BOX_COLOR_NAMES[color.toLowerCase()] ?? color.toUpperCase();
 }
 
 /** A held box still low enough over the belt to collide with boxes riding on it. */

@@ -18,6 +18,7 @@ export type HardwareCommand =
   | { kind: "CONVEYOR_MOVE"; distanceMm: number; absolute: boolean; feed?: number; raw: string }
   | { kind: "CONVEYOR_SPEED"; percent: number; raw: string }
   | { kind: "SENSOR_QUERY"; raw: string }
+  | { kind: "COLOR_QUERY"; raw: string }
   | { kind: "AUTO_FEED"; enabled: boolean; speedPercent?: number; raw: string }
   | { kind: "HOME"; axis?: number; raw: string }
   | { kind: "PAUSE"; raw: string }
@@ -75,6 +76,11 @@ export function formatSensorLine(blocked: boolean): string {
   return `SENSOR=${blocked ? 1 : 0}`;
 }
 
+/** Reply to `COLOR?`: colour of the box at the light beam (`COLOR=RED`), or `COLOR=NONE`. */
+export function formatColorLine(colorName: string | null): string {
+  return `COLOR=${colorName ?? "NONE"}`;
+}
+
 export function formatO103StatusReply(state: VirtualControllerState): string {
   if (state === "Home") return "State:Homing";
   if (state === "Hold") return "State:Busy";
@@ -124,6 +130,10 @@ export function parseIncomingHardwareLine(
   // Conveyor light sensor query (`@01SENSOR?` -> `SENSOR=1` / `SENSOR=0`)
   if (/^SENSOR\s*\?$/i.test(line)) {
     return { kind: "SENSOR_QUERY", raw };
+  }
+  // Colour of the box at the light sensor (`@01COLOR?` -> `COLOR=RED` / `COLOR=NONE`)
+  if (/^COLOR\s*\?$/i.test(line)) {
+    return { kind: "COLOR_QUERY", raw };
   }
   // Conveyor auto-feed (`@01AUTO=1`, `@01AUTO=1,60`, `@01AUTO=0`)
   const autoMatch = line.match(/^AUTO\s*=\s*([01])(?:\s*,\s*(\d{1,3}))?$/i);

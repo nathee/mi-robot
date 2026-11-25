@@ -69,16 +69,30 @@ describe("workcell layout editing", () => {
 
 import {
   autoFeedSpeedMmS,
+  boxAtSensor,
+  boxColorName,
   DEFAULT_SENSOR,
   isSensorBlocked,
   stepConveyor,
   defaultConveyorRuntime,
 } from "@/lib/sim/workcell";
-import { formatSensorLine, parseIncomingHardwareLine } from "@/lib/hardware/protocol";
+import { formatColorLine, formatSensorLine, parseIncomingHardwareLine } from "@/lib/hardware/protocol";
 
 describe("light sensor", () => {
   const atStop = makeBox({ id: "a", x: min + 12.5, y: cross, z: conveyor.topZ + 12.5 });
   const far = makeBox({ id: "b", x: min + 120, y: cross, z: conveyor.topZ + 12.5 });
+
+  it("COLOR? names the box at the beam (for OK/NG grading), NONE when clear", () => {
+    expect(parseIncomingHardwareLine("@01COLOR?", { currentJoints: [0, 0, 0, 0, 0, 0] }).kind).toBe("COLOR_QUERY");
+    const red = { ...atStop, color: "#ef4444" };
+    expect(boxAtSensor(conveyor, DEFAULT_SENSOR, [far, red])?.id).toBe("a");
+    expect(formatColorLine(boxColorName(red.color))).toBe("COLOR=RED");
+    expect(boxColorName("#3B82F6")).toBe("BLUE");
+    expect(boxColorName("#123456")).toBe("#123456");
+    expect(boxAtSensor(conveyor, DEFAULT_SENSOR, [far])).toBeNull();
+    expect(formatColorLine(null)).toBe("COLOR=NONE");
+    expect(boxAtSensor(conveyor, { ...DEFAULT_SENSOR, enabled: false }, [red])).toBeNull();
+  });
 
   it("detects a box at the end stop, ignores boxes upstream and lifted boxes", () => {
     expect(isSensorBlocked(conveyor, DEFAULT_SENSOR, [atStop])).toBe(true);

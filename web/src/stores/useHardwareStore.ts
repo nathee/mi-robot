@@ -7,9 +7,11 @@ import {
   formatO103StatusReply,
   formatWlkataStatusReport,
   formatSensorLine,
+  formatColorLine,
   parseIncomingHardwareLine,
   type VirtualControllerState,
 } from "@/lib/hardware/protocol";
+import { boxAtSensor, boxColorName } from "@/lib/sim/workcell";
 import { useCodeStore } from "./useCodeStore";
 import { useWorkcellStore } from "./useWorkcellStore";
 import { usePathStore } from "./usePathStore";
@@ -328,6 +330,18 @@ export const useHardwareStore = create<HardwareState>((set, get) => ({
       const wc = useWorkcellStore.getState();
       if (state.connected) {
         void get().sendRawLine(wc.sensor.enabled ? formatSensorLine(wc.sensorBlocked) : "error:sensor disabled");
+      }
+      return;
+    }
+
+    if (cmd.kind === "COLOR_QUERY") {
+      // Colour of the box at the light beam, so a controller can grade parts (always answered)
+      const wc = useWorkcellStore.getState();
+      if (state.connected) {
+        const box = boxAtSensor(wc.conveyor, wc.sensor, wc.boxes);
+        void get().sendRawLine(
+          wc.sensor.enabled ? formatColorLine(box ? boxColorName(box.color) : null) : "error:sensor disabled"
+        );
       }
       return;
     }
