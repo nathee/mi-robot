@@ -163,11 +163,6 @@ function busServos() {
   return map;
 }
 
-function allServoIds(): number[] {
-  const { joints, gripper } = busServos();
-  return [...joints.map((j) => j.servoId), gripper.servoId];
-}
-
 function log(dir: "sys" | "out" | "in" | "ok" | "error", text: string) {
   useSerialStore.getState().appendLog({ dir, text: `[xArm] ${text}` });
 }
@@ -192,6 +187,11 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       }),
       gripper: { ...base.gripper, ...gripperOverride },
     };
+  };
+
+  const allServoIds = (): number[] => {
+    const { joints, gripper } = effectiveBusServos();
+    return [...joints.map((j) => j.servoId), gripper.servoId];
   };
 
   const send = async (frame: Uint8Array, opts: { quiet?: boolean; logText?: string } = {}) => {
@@ -525,7 +525,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         } else if (reply.kind === "POSITIONS") {
           if (!applyNextPositions && !get().teach) continue;
           applyNextPositions = false;
-          const { joints: maps } = busServos();
+          const { joints: maps } = effectiveBusServos();
           const robot = useRobotStore.getState();
           const q = jointsFromServoPositions(reply.positions, maps, robot.joints);
           usePathStore.getState().cancelForManualControl();
@@ -561,10 +561,10 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
           log("sys", t("log.xarm.teachOn"));
           return;
         }
-        void send(buildServoOffPacket(busServos().joints.map((j) => j.servoId)));
+        void send(buildServoOffPacket(effectiveBusServos().joints.map((j) => j.servoId)));
         log("sys", t("log.xarm.teachOn"));
         teachTimer = setInterval(() => {
-          void send(buildReadPositionsPacket(busServos().joints.map((j) => j.servoId)), { quiet: true });
+          void send(buildReadPositionsPacket(effectiveBusServos().joints.map((j) => j.servoId)), { quiet: true });
         }, TEACH_POLL_MS);
       } else {
         stopTeachPolling();
