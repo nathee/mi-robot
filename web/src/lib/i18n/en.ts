@@ -25,7 +25,7 @@ export const en = {
   "toolbar.save": "Save",
   "toolbar.hwBusTitle": "Connect the real arm over USB",
   "toolbar.hwRs485Title": "Connect USB-RS485 or ESP32 Wi-Fi",
-  "toolbar.realArm": "Real arm",
+  "toolbar.realArm": "Connect",
   "toolbar.saveTitle": "Save snapshot to Work History (Ctrl+S)",
   "toolbar.historyTitle": "Work History — view and restore snapshots",
   "toolbar.program": "Program",
@@ -49,6 +49,13 @@ export const en = {
   "status.scroll": "Scroll",
   "status.zoom": "Zoom",
   "status.vendor": "eleccom.in.th, Thailand",
+
+  "visits.label": "Visits {n}",
+  "visits.title": "Total site visits",
+
+  "intro.desc": "A web-based robot arm control simulator",
+  "intro.author": "Developed by Mr. Nathee Srina",
+  "intro.start": "Get started",
 
   // ControlSidebar
   "sidebar.manual": "Manual",

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRobotModelStore } from "@/stores/useRobotModelStore";
 import { useThemeStore } from "@/stores/useThemeStore";
 import { useLocaleStore } from "@/stores/useLocaleStore";
+import { useVisitStore } from "@/stores/useVisitStore";
+import { IntroModal } from "./Modals";
 import { RobotSelectScreen } from "./RobotSelectScreen";
 import { SimulatorShell } from "./SimulatorShell";
 
@@ -15,11 +17,13 @@ export function RobotGate() {
   const initialized = useRobotModelStore((s) => s.initialized);
   const loadedModel = useRobotModelStore((s) => s.loadedModel);
   const selecting = useRobotModelStore((s) => s.selecting);
+  const [introOpen, setIntroOpen] = useState(true);
 
   useEffect(() => {
     useThemeStore.getState().init();
     useLocaleStore.getState().init();
     useRobotModelStore.getState().init();
+    useVisitStore.getState().init();
   }, []);
 
   if (!initialized) {
@@ -30,6 +34,7 @@ export function RobotGate() {
     <>
       {loadedModel && <SimulatorShell />}
       {(selecting || !loadedModel) && <RobotSelectScreen />}
+      <IntroModal open={introOpen} onClose={() => setIntroOpen(false)} />
     </>
   );
 }

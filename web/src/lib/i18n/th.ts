@@ -23,7 +23,7 @@ export const th: Messages = {
   "toolbar.save": "บันทึก",
   "toolbar.hwBusTitle": "เชื่อมต่อแขนจริงผ่าน USB",
   "toolbar.hwRs485Title": "เชื่อมต่อ USB-RS485 หรือ ESP32 Wi-Fi",
-  "toolbar.realArm": "แขนจริง",
+  "toolbar.realArm": "เชื่อมต่อ",
   "toolbar.saveTitle": "บันทึกสแนปช็อตลงประวัติงาน (Ctrl+S)",
   "toolbar.historyTitle": "ประวัติงาน — ดูและกู้คืนสแนปช็อต",
   "toolbar.program": "โปรแกรม",
@@ -47,6 +47,13 @@ export const th: Messages = {
   "status.scroll": "ล้อเมาส์",
   "status.zoom": "ซูม",
   "status.vendor": "eleccom.in.th ประเทศไทย",
+
+  "visits.label": "ผู้เข้าชม {n}",
+  "visits.title": "จำนวนการเข้าชมเว็บไซต์",
+
+  "intro.desc": "จำลองการควบคุมแขนกลการแข่งขันทักษะ ปวส.",
+  "intro.author": "จัดทำโดย นายนที ศรีนะ",
+  "intro.start": "เริ่มใช้งาน",
 
   // ControlSidebar
   "sidebar.manual": "สั่งงานเอง",

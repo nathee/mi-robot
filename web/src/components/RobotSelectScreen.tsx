@@ -9,6 +9,7 @@ import { useLocaleStore } from "@/stores/useLocaleStore";
 import type { MessageKey } from "@/lib/i18n";
 import { useEscapeKey } from "./ui";
 import { useT } from "@/lib/i18n/useT";
+import { VisitCounter } from "./VisitCounter";
 
 const SUMMARY_KEY: Record<RobotModelId, MessageKey> = {
   mirobot: "robot.summary.mirobot",
@@ -251,6 +252,10 @@ export function RobotSelectScreen() {
           </p>
         )}
       </div>
+
+      {!isSwitch && (
+        <VisitCounter className="fixed right-4 bottom-3 text-[11px] text-slate-500 dark:text-slate-400" />
+      )}
     </div>
   );
 }

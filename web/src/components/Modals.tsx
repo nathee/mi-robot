@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Clock, Download, RotateCcw, Save, Trash2, Usb, X } from "lucide-react";
+import { AlertTriangle, Bot, Clock, Download, ExternalLink, RotateCcw, Save, Trash2, Usb, X } from "lucide-react";
+import { APP_NAME } from "@/lib/appConfig";
 import {
   formatRelativeTime,
   type WorkspaceHistoryEntry,
@@ -104,6 +105,59 @@ function TextPromptModalInner({
 export function TextPromptModal(props: TextPromptModalProps) {
   if (!props.open) return null;
   return <TextPromptModalInner key={props.initialValue} {...props} />;
+}
+
+interface IntroModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+/** Welcome dialog shown every time the site opens (above the robot selector). */
+export function IntroModal({ open, onClose }: IntroModalProps) {
+  const t = useT();
+  useEscapeKey(open, onClose);
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="intro-title"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+      onClick={onClose}
+    >
+      <div
+        className="animate-ui-in w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-2xl dark:border-slate-700/80 dark:bg-slate-900"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500/12 text-sky-500">
+          <Bot className="h-6 w-6" aria-hidden />
+        </div>
+        <h3 id="intro-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          {APP_NAME}
+        </h3>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{t("intro.desc")}</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{t("intro.author")}</p>
+        <a
+          href="https://cms.eleccom.in.th/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-sky-600 hover:underline dark:text-sky-400"
+        >
+          cms.eleccom.in.th
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+        </a>
+        <button
+          type="button"
+          autoFocus
+          onClick={onClose}
+          className="mt-5 w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+        >
+          {t("intro.start")}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface ConfirmModalProps {

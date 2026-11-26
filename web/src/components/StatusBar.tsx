@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/useT";
+import { VisitCounter } from "./VisitCounter";
 
 function getUtcOffsetString(date: Date): string {
   const offsetMin = -date.getTimezoneOffset();
@@ -78,6 +79,10 @@ export function StatusBar() {
         <span className="hidden shrink-0 font-mono text-[10px] tabular-nums text-slate-400 sm:inline">
           {clock || "--:--:--"} ({utcOffset})
         </span>
+
+        <span className="hidden h-3 w-px bg-slate-200 sm:inline-block dark:bg-slate-800" />
+
+        <VisitCounter />
       </div>
     </footer>
   );
