@@ -557,8 +557,8 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
         if (!get().connected) return;
         set({ teach: true, mirror: false });
         if (isReplMode()) {
-          void sendReplLine(buildReplStopLine());
-          log("sys", t("log.xarm.teachOn"));
+          // CoreX MicroPython (Hiwonder.LSC / BusServo) has no read-position or unload call.
+          log("error", t("log.xarm.replNoTorqueOff"));
           return;
         }
         void send(buildServoOffPacket(effectiveBusServos().joints.map((j) => j.servoId)));
@@ -600,7 +600,7 @@ export const useXarmLinkStore = create<XarmLinkState>((set, get) => {
       set({ mirror: false });
       if (isReplMode()) {
         await sendReplLine(buildReplStopLine());
-        log("sys", t("log.xarm.servosOff"));
+        log("error", t("log.xarm.replNoTorqueOff"));
         return;
       }
       await send(buildServoOffPacket(allServoIds()));

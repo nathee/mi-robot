@@ -643,6 +643,7 @@ export const en = {
   "log.xarm.teachOn": "Teach mode: servos are limp, move the arm by hand. The simulator follows.",
   "log.xarm.teachOff": "Teach mode off: servos stay limp until the next move is sent.",
   "log.xarm.servosOff": "All servos off (torque released)",
+  "log.xarm.replNoTorqueOff": "CoreX REPL mode can't release torque or read servo positions (the firmware's LSC/BusServo API has no such call). Only the running action was stopped. Use USB HID or LSC binary serial for teach / read.",
 
   // Compiler messages
   "err.maxSteps": "Program exceeds {n} steps",

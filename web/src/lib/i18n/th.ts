@@ -641,6 +641,7 @@ export const th: Messages = {
   "log.xarm.teachOn": "โหมดสอน: เซอร์โวคลายตัว ขยับแขนด้วยมือได้ โปรแกรมจำลองจะขยับตาม",
   "log.xarm.teachOff": "ปิดโหมดสอน: เซอร์โวยังคลายตัวจนกว่าจะส่งคำสั่งเคลื่อนครั้งถัดไป",
   "log.xarm.servosOff": "ปิดเซอร์โวทั้งหมด (ปลดแรงบิด)",
+  "log.xarm.replNoTorqueOff": "โหมด CoreX REPL ปลดแรงบิดหรืออ่านตำแหน่งเซอร์โวไม่ได้ (เฟิร์มแวร์ LSC/BusServo ไม่มีคำสั่งนี้) หยุดได้แค่ท่าที่กำลังรัน ใช้ USB HID หรือ LSC binary serial เพื่อสอนด้วยมือ/อ่านตำแหน่ง",
 
   // Compiler messages
   "err.maxSteps": "โปรแกรมเกิน {n} ขั้น",
