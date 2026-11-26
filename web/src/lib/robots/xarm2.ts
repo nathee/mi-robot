@@ -89,8 +89,14 @@ export const XARM2_PROFILE: RobotProfile = {
   },
   reachMm: L2 + L3 + DF,
   analyticIk: "PLANAR_5DOF",
-  meshSource: "primitive",
-  // Anodised-blue brackets on a black base, as on the real arm
+  // Meshes split from Hiwonder's xArm2.0.stp (public/models/xArm2.0.stp) by a FreeCAD script; each
+  // link is in its MDH frame with its proximal joint axis on the profile's joint. The CAD measures
+  // L2 = 100.5 and L3 = 94.7 mm, and its arm column sits 2.9 mm behind the base-servo axis.
+  // The gripper meshes (gripper/driver/idler/finger.stl) are loaded by the XARM_GRIPPER tool visual.
+  meshSource: "stl",
+  stlDir: "/models/xarm2",
+  stlLinks: ["base", "link1", "link2", "link3", "link4", "link5"],
+  // Fallback colors; the STLs carry per-face colors (anodised-blue brackets, black servos and base)
   meshColors: {
     base: 0x1f2226,
     link1: 0x1e88e5,

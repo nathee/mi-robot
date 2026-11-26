@@ -5,8 +5,10 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  type Object3D,
   TorusGeometry,
 } from "three";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { TOOL_DEFS, type ToolType } from "@/lib/tools/toolDefs";
 
 /**
@@ -215,6 +217,7 @@ function buildXarmClaw(): ToolVisual {
   const silver = mat(0xb8bec6, { metalness: 0.7, roughness: 0.3 });
   const rubber = mat(0x0f1115, { metalness: 0, roughness: 0.9 });
   const { ring, setClosed } = statusRing(-4);
+  ring.userData.keep = true; // survives the swap to the CAD meshes
 
   g.add(zCylinder(14, 14, 0, -4, silver));
   g.add(ring);
@@ -249,6 +252,7 @@ function buildXarmClaw(): ToolVisual {
   /** Pivot angle that puts each tip `half` mm from the centre line. */
   const angleFor = (half: number) => Math.asin(Math.max(-1, Math.min(1, (half - PIVOT_X) / FINGER_LEN)));
   let angle = angleFor(27.5);
+  const cad = loadXarmClawCad(g);
   return {
     group: g,
     update(dtMs, closed, held) {
@@ -257,8 +261,110 @@ function buildXarmClaw(): ToolVisual {
       angle = approach(angle, target, dtMs, 0.016);
       fingers[0].rotation.y = angle;
       fingers[1].rotation.y = -angle;
+      cad.update(dtMs, closed ? (held ? held / 2 + 2 : 3) : XARM_CLAW_OPEN_HALF_MM);
     },
   };
+}
+
+/**
+ * Finger train of the CAD gripper, in the tool (link6) frame, mm. Taken from xArm2.0.stp by the
+ * same script that wrote the STLs; the +Y finger is modelled and the -Y one is its mirror image.
+ * Driver gear and idler link form a parallelogram, so the finger translates without turning.
+ */
+const XARM_CLAW = {
+  driverPivot: [14.0, -8.45],
+  idlerPivot: [5.0, -27.45],
+  fingerPin: [28.4, -33.65],
+  /** Inner face of the finger pad (half-gap) in the CAD pose. */
+  tipHalf: 10.1,
+} as const;
+const XARM_CLAW_OPEN_HALF_MM = 24;
+
+/** Swaps the procedural claw for the CAD meshes once they load; keeps it if they don't. */
+function loadXarmClawCad(g: Group): { update: (dtMs: number, halfMm: number) => void } {
+  const dir = "/models/xarm2";
+  const loader = new STLLoader();
+  const load = (name: string) =>
+    loader.loadAsync(`${dir}/${name}.stl`).then((geo) => {
+      geo.computeVertexNormals();
+      return geo;
+    });
+  const material = new MeshStandardMaterial({ vertexColors: true, metalness: 0.35, roughness: 0.5 });
+  const [dy, dz] = [XARM_CLAW.fingerPin[0] - XARM_CLAW.driverPivot[0], XARM_CLAW.fingerPin[1] - XARM_CLAW.driverPivot[1]];
+  const linkLen = Math.hypot(dy, dz);
+  const phase = Math.atan2(dy, -dz);
+  /** Rotation about +X that puts the pad's inner face `half` mm from the centre line. */
+  const angleFor = (half: number) =>
+    Math.asin(Math.max(-1, Math.min(1, (half - XARM_CLAW.tipHalf + dy) / linkLen))) - phase;
+
+  const sides: { driver: Group; idler: Group; finger: Group }[] = [];
+  let angle = angleFor(XARM_CLAW_OPEN_HALF_MM);
+  const pose = () => {
+    // Rotating by `angle` about +X moves the pin by R(angle)·v − v (v = pin − driver pivot)
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const offY = dy * c - dz * s - dy;
+    const offZ = dy * s + dz * c - dz;
+    for (const side of sides) {
+      side.driver.rotation.x = angle;
+      side.idler.rotation.x = angle;
+      side.finger.position.set(0, offY * MM, offZ * MM);
+    }
+  };
+
+  Promise.all(["gripper", "driver", "idler", "finger"].map(load))
+    .then(([body, driver, idler, finger]) => {
+      /** Group whose origin is the pivot, holding the mesh shifted back so it stays in place. */
+      const pivoted = (geo: typeof body, p: readonly number[]) => {
+        const pivot = new Group();
+        pivot.position.set(0, p[0] * MM, p[1] * MM);
+        const mesh = new Mesh(geo, material);
+        mesh.position.set(0, -p[0] * MM, -p[1] * MM);
+        pivot.add(mesh);
+        return pivot;
+      };
+      const cadGroup = new Group();
+      cadGroup.name = "xarmClawCad";
+      cadGroup.add(new Mesh(body, material));
+      for (const mirror of [1, -1]) {
+        const half = new Group();
+        half.scale.y = mirror; // three.js flips the winding for negative scale
+        const side = {
+          driver: pivoted(driver, XARM_CLAW.driverPivot),
+          idler: pivoted(idler, XARM_CLAW.idlerPivot),
+          finger: new Group(),
+        };
+        side.finger.add(new Mesh(finger, material));
+        half.add(side.driver, side.idler, side.finger);
+        cadGroup.add(half);
+        sides.push(side);
+      }
+      // Keep the status ring; drop the procedural parts
+      g.children.filter((c) => !c.userData.keep).forEach((c) => {
+        g.remove(c);
+        disposeTree(c);
+      });
+      g.add(cadGroup);
+      pose();
+    })
+    .catch(() => undefined);
+
+  return {
+    update(dtMs, halfMm) {
+      if (!sides.length) return;
+      angle = approach(angle, angleFor(halfMm), dtMs, 0.016);
+      pose();
+    },
+  };
+}
+
+function disposeTree(root: Object3D): void {
+  root.traverse((o) => {
+    const mesh = o as Mesh;
+    mesh.geometry?.dispose();
+    const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+    mats.forEach((m) => m.dispose());
+  });
 }
 
 export function createToolVisual(type: ToolType): ToolVisual {

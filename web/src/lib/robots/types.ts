@@ -50,6 +50,12 @@ export interface RobotProfile {
   /** "stl" loads /models/<dir>/<link>.stl, "primitive" builds boxes from the MDH table. */
   meshSource: "stl" | "primitive";
   stlDir?: string;
+  /**
+   * Which of base/link1..link6 have an STL file (default: all). Links not listed become empty
+   * groups, e.g. a robot without a physical J6 has no link6.stl.
+   */
+  stlLinks?: readonly string[];
+  /** STLs with per-face colors (VisCAM "COLOR=" header) use them instead of meshColors. */
   meshColors: Record<string, number>;
   allowedTools: readonly ToolType[];
   defaultTool: ToolType;

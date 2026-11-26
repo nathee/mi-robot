@@ -21,22 +21,31 @@ export interface LoadedRobotMeshes {
  */
 export function loadMirobotSTLs(
   targetGroup: Group,
-  basePath = "/models"
+  basePath = "/models",
+  stlLinks?: readonly string[]
 ): Promise<LoadedRobotMeshes> {
   const loader = new STLLoader();
   const names = ["base", ...LINK_NAMES];
 
-  const loadOne = (name: string): Promise<Mesh> =>
+  const loadOne = (name: string): Promise<Object3D> =>
     new Promise((resolve) => {
+      if (stlLinks && !stlLinks.includes(name)) {
+        const empty = new Group();
+        empty.name = name;
+        resolve(empty);
+        return;
+      }
       const url = `${basePath}/${name}.stl`;
       loader.load(
         url,
         (geo) => {
           geo.computeVertexNormals();
+          const hasColors = (geo as typeof geo & { hasColors?: boolean }).hasColors === true;
           const mat = new MeshStandardMaterial({
-            color: STL_MESH_COLORS[name] ?? 0xbdbdbd,
-            metalness: 0.2,
-            roughness: 0.7,
+            color: hasColors ? 0xffffff : (STL_MESH_COLORS[name] ?? 0xbdbdbd),
+            vertexColors: hasColors,
+            metalness: hasColors ? 0.35 : 0.2,
+            roughness: hasColors ? 0.5 : 0.7,
           });
           const mesh = new Mesh(geo, mat);
           mesh.name = name;
@@ -54,7 +63,7 @@ export function loadMirobotSTLs(
     });
 
   return Promise.all(names.map(loadOne)).then((meshes) => {
-    const byName = new Map<string, Mesh>();
+    const byName = new Map<string, Object3D>();
     meshes.forEach((m) => byName.set(m.name, m));
 
     const base = byName.get("base")!;
@@ -92,7 +101,7 @@ export function disposeObjectTree(root: Object3D | null | undefined): void {
 /** Loads the active robot's 3D model: STL meshes when the profile has them, primitives otherwise. */
 export function loadRobotMeshes(targetGroup: Group, profile: RobotProfile): Promise<LoadedRobotMeshes> {
   if (profile.meshSource === "stl") {
-    return loadMirobotSTLs(targetGroup, profile.stlDir ?? "/models");
+    return loadMirobotSTLs(targetGroup, profile.stlDir ?? "/models", profile.stlLinks);
   }
   return Promise.resolve(buildPrimitiveRobot(targetGroup, profile));
 }
