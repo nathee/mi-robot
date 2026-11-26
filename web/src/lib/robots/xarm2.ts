@@ -111,17 +111,17 @@ export const XARM2_PROFILE: RobotProfile = {
   hardwareDriver: "HIWONDER_BUS_SERVO",
   busServos: {
     // xArm 2.0 convention: ID 6 = base, ID 5 = shoulder, ID 4 = elbow,
-    // ID 3 = wrist roll, ID 2 = wrist pitch, ID 1 = gripper.
+    // ID 3 = wrist pitch, ID 2 = wrist roll, ID 1 = gripper (verified on hardware).
     // Note: in the simulator's MDH frame, +J2/+J3/+J4 lean the arm forward (+X).
     // On the physical xArm 2.0:
-    //   - ID 5 (Shoulder) & ID 2 (Wrist Pitch): decreasing pulse (< 500) leans forward => direction: -1
+    //   - ID 5 (Shoulder) & ID 3 (Wrist Pitch): decreasing pulse (< 500) leans forward => direction: -1
     //   - ID 4 (Elbow): increasing pulse (> 500) bends forward => direction: +1
     joints: [
       { jointIndex: 0, servoId: 6, direction: 1, offsetDeg: 0 }, // J1 Base
       { jointIndex: 1, servoId: 5, direction: -1, offsetDeg: 0 }, // J2 Shoulder
       { jointIndex: 2, servoId: 4, direction: 1, offsetDeg: 0 }, // J3 Elbow
-      { jointIndex: 3, servoId: 2, direction: -1, offsetDeg: 0 }, // J4 Wrist Pitch
-      { jointIndex: 4, servoId: 3, direction: 1, offsetDeg: 0 }, // J5 Wrist Roll
+      { jointIndex: 3, servoId: 3, direction: -1, offsetDeg: 0 }, // J4 Wrist Pitch
+      { jointIndex: 4, servoId: 2, direction: 1, offsetDeg: 0 }, // J5 Wrist Roll
     ],
     gripper: { servoId: 1, openPos: 250, closePos: 700 },
   },
